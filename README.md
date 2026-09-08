@@ -175,7 +175,16 @@ cd <this folder>
 .\Run-Deploy.ps1 -Server SQLPROD01 -SourceDb WA_LIVE -AdvDb WA_ADV `
                  -Stage realrun -IConfirm
 
-# 8) Remove the test footprint (test rows + run history + profiles)
+# 8) OPTIONAL - throughput measurement. Seeds ~2.6 M rows, then archives and
+#    deletes them for one minute per set. Not part of a normal deployment.
+.\Run-Deploy.ps1 -Server SQLPROD01 -SourceDb WA_LIVE -AdvDb WA_ADV `
+                 -Stage perf -IConfirm
+
+#    The perf stage already runs the undo in a finally. This is only needed if
+#    the whole PowerShell session died with it:
+.\Run-Deploy.ps1 -Server SQLPROD01 -SourceDb WA_LIVE -Stage perfrestore
+
+# 9) Remove the test footprint (test rows + run history + profiles)
 .\Run-Deploy.ps1 -Server SQLPROD01 -SourceDb WA_LIVE -Stage cleanup -IConfirm
 ```
 
@@ -235,6 +244,140 @@ A run that deletes everything old is not a pass — the gates have to hold.
 
 ---
 
+## Throughput on WA01 — how much moves in one minute
+
+`40_perf_seed.sql` then `41_perf_test.sql`. Mode 1 throughout, so **every row is
+copied to `kArchiveManagerBackups` and then deleted from the source**, inside the
+runner's normal batching, transactions and bookkeeping — this is not a raw
+`DELETE` benchmark. One minute per document set, run through the same impersonated
+runner login as the Agent job.
+
+Single SQL Server 2022 instance, `Czech_CS_AS`, **no custom indexes in the WMS
+databases** (the house rule) — so these are honest no-index figures, which is the
+production scenario.
+
+**Ranges from three consecutive runs, not a single number.** The same script on
+the same instance with the same data varies by up to a factor of two on this box,
+so a point value would be false precision. Median is given because with n = 3 it
+is more representative than a mean.
+
+### Per table — rows moved in one minute
+
+| Set | Table | Rows in 1 min (min – max) | Rows/s median | Rows/s range |
+|---|---|---|---|---|
+| `AAD_WORKQ_ARCH` | `t_work_q` | 292 000 – 376 000 | **5 667** | 4 949 – 6 267 |
+| | `t_work_q_assignment` | 29 591 – 38 359 | 570 | 502 – 639 |
+| | `t_work_q_dependency` | 29 591 – 38 359 | 570 | 502 – 639 |
+| `AAD_TRANLOG_ARCH` | `t_tran_log` | 102 000 – 196 000 | **3 400** | 2 372 – 4 667 |
+| | `t_tran_log_sn` | 9 864 – 18 906 | 329 | 229 – 450 |
+| | `t_tran_log_reason` | 9 864 – 18 906 | 329 | 229 – 450 |
+| `AAD_PICKDETAIL_ARCH` | `t_pick_detail` | 102 000 – 192 000 | **4 278** | 2 372 – 4 364 |
+| | `t_allocation` | 9 864 – 18 906 | 430 | 229 – 434 |
+| `ADV_LOGMSG_ARCH` | `t_log_message` | 84 000 – 85 520 | **2 940** | 1 500 – 2 949 |
+| `AAD_ORDER_ARCH` | `t_order_detail` | 14 600 – 17 400 | 264 | 256 – 300 |
+| | `t_order` | 7 300 – 8 700 | 132 | 128 – 150 |
+| | `t_order_comment` | 7 300 – 8 700 | 132 | 128 – 150 |
+| | `t_order_detail_comment` | 746 – 912 | 14 | 13 – 16 |
+| | `t_pack` | 2 – 3 | — | — |
+
+### Per set
+
+| Set | Strategy | Rows moved in 1 min | Rows/s median | Rows/s range | Prepare |
+|---|---|---|---|---|---|
+| `AAD_WORKQ_ARCH` | TIMESTAMP | 351 182 – 452 718 | **6 807** | 5 952 – 7 545 | — |
+| `AAD_PICKDETAIL_ARCH` | ANCHOR | 111 864 – 210 906 | **4 712** | 2 601 – 4 793 | 11–16 s |
+| `AAD_TRANLOG_ARCH` | ANCHOR | 121 728 – 233 812 | **4 058** | 2 831 – 5 567 | 11–12 s |
+| `ADV_LOGMSG_ARCH` | ANCHOR | 84 000 – 85 520 | **2 940** | 1 500 – 2 949 | 2 s |
+| `AAD_ORDER_ARCH` | ANCHOR | 29 948 – 35 715 | **542** | 525 – 616 | 1–2 s |
+
+`Divergence` (archived − deleted) was **0** on every row of every table in all
+three runs, and `C_ORPHAN_CHECK` was 0/0/0 afterwards. Each run archived and
+deleted roughly **0.8–1.0 million rows** across its five one-minute windows.
+
+### Why the runs disagree — and what that tells you
+
+No set was consistently fast or slow: `t_pick_detail` went 4 364 → 2 372 → 4 278
+and `t_log_message` 2 949 → 2 940 → 1 500. Different sets were the outlier in
+different runs, which is the signature of a shared resource, not of a per-set
+problem.
+
+What is ruled out: candidate preparation took a comparable 11–16 s for the same
+600 000 keys every time, so the source scan is not the variable; no source-log
+autogrowth occurred *during* any measurement; the VLF count is a healthy 41; the
+vendor purge never ran inside a measurement window (`PURGE_INTERFERENCE` empty in
+all three); and `COVERAGE` and `VALIDITY` passed in all three.
+
+So the variance sits in the **write** phase — the archive `INSERT` plus the source
+`DELETE`. `WRITELOG` is the dominant wait on this instance, and the source log had
+reached **28.8 GB in FULL recovery with every VLF active and
+`log_reuse_wait_desc = LOG_BACKUP`** by the last run. **The exact mechanism was
+not proven**, and stating it as fact would be dishonest.
+
+The operational lesson stands regardless, and it is the useful part:
+
+> At these volumes the archiver is write-bound, and the **source database's log
+> configuration governs throughput** — not the archiver's settings. Pre-size the
+> source log, use a fixed-MB autogrowth rather than a percentage (this instance
+> grew 164 MB → 2 162 MB in 10 % steps, the last two blocking for 2.1 s and 2.5 s
+> each), and keep log backups running so the log can be reused. Archiving a large
+> backlog writes as much log volume as the deletes it performs.
+>
+> **Measure on the target instance.** Take three runs, not one.
+
+`41_perf_test.sql` therefore prints a `CONDITIONS` section with the recovery
+model, log-reuse wait and log size of every database involved, so two results can
+be compared on equal terms. On this instance it reports, correctly:
+`log cannot be reused until a log backup runs, AND it grows by a percentage -
+both throttle a bulk archive`.
+
+### Reading these numbers honestly
+
+- **Four of five sets were stopped by the clock in both runs**, leaving 51 300 –
+  498 000 rows still eligible per set — so those are rates, not volumes. The
+  script proves this rather than assuming it (`VALIDITY` section), and takes the
+  snapshot *before* restoring anything, because the vendor purge would otherwise
+  falsify it.
+- **`ADV_LOGMSG_ARCH` drained everything it was allowed to have** (29 s in both
+  runs), so ~2 940 rows/s is a floor — and the two runs agreeing to within 0.3 %
+  is the clearest signal in the whole table. This is structural, not a seeding
+  mistake: ADV caps `t_log_message` at 100 000 rows and trims to 95 000, so its
+  whole archivable population is **smaller than one minute of throughput**.
+  kArchiveManager will always empty it well inside the window.
+- **`t_order` looks slow because a document is not a row.** 128–150 documents/s is
+  four tables deep with a `BatchDocCount` of 50 — five separate statements per
+  batch against five tables. Compare rows: 525–616 rows/s.
+- **`t_pack` moved 2–3 rows and that is close to its maximum.** Its primary key is
+  `(id, wh_id)` and `id` is a foreign key to `t_employee` — it identifies the
+  *packer*. Seven employees on K01 means at most seven rows, whatever the order
+  volume. A per-table rate for it is meaningless by construction; the rows are
+  there so "structurally tiny" is not misread as "never tested".
+- **Child tables run at roughly a tenth of their parent** because the seed gives
+  every tenth parent a child (`ChildEvery`), not because they are ten times
+  slower. Their rate scales with how many children real documents have.
+- **The 11–12 second prepare** on the two 600 000-row sets is real work a scheduled
+  run also does: candidates are selected **once** per run, so a cold backlog pays
+  it up front. It is amortised over a longer window — which is why the shipped
+  `JOB_DEFAULT` profile uses 55 minutes, not one.
+
+### Extrapolating to a real window — read the caveats first
+
+A 55-minute `JOB_DEFAULT` window at these rates is worth **single-digit to low
+tens of millions of rows** for the log-shaped sets. That range is deliberately
+loose, for three reasons that all matter more than the arithmetic:
+
+1. **The per-set rate varied 2× between two runs here** (above). Measure on the
+   target instance rather than trusting this table.
+2. **A TIMESTAMP process is capped at 400 000 rows per invocation** while
+   `MaxCandidates` is `NULL` — which is how `JOB_DEFAULT` ships. No window length
+   changes that. See the operational note below.
+3. **Throughput is write-bound**, so it degrades as the source log fills and
+   recovers when it is backed up. A first pass over a large backlog will not run
+   at steady-state speed.
+
+Size the first production run from a measurement, not from this README.
+
+---
+
 ## Scripts
 
 | Script | Writes? | Purpose |
@@ -258,7 +401,10 @@ A run that deletes everything old is not a pass — the gates have to hold.
 | `12_verify.sql` | no | Baseline reconciliation for the order/work-queue pair |
 | `13_restore.sql` | opt-in | Restore from archive |
 | `19_add_logmessage_key.sql` | — | **DO NOT USE** — breaks the house rule; see `24` |
-| `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches) |
+| `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
+| `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
+| `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |
+| `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches). Always restores the performance-test baseline |
 
 ---
 
@@ -289,7 +435,66 @@ discarded batch, not an error.
 
 **`MaxRowsPerTransaction` must be ≤ 4000** or the validator raises an ERROR: a
 single `DELETE` of ~5000 rows escalates to a `TABLE X` lock on the source. Raise
-`MaxBatchesPerRun` for throughput instead.
+`MaxBatchesPerRun` for throughput instead — but see the next note, because for a
+TIMESTAMP process that advice is wrong.
+
+**`MaxCandidates = NULL` is a 400 000-row ceiling, not "no limit"** — and
+`JOB_DEFAULT` ships with it `NULL`. In `usp_RunTimestampProcess`, the `@MaxRows IS
+NULL` branch computes its own value:
+
+```sql
+@DefaultCandidateBatches = CASE WHEN @MaxBatches > 100 THEN 100 ELSE @MaxBatches END
+@MaxRows                 = @BatchRowCount * @DefaultCandidateBatches
+```
+
+`@BatchRowCount` is itself hard-capped at 4000 (lock escalation), so the ceiling
+is **4000 × 100 = 400 000 rows per invocation, however long the window is**.
+Raising `MaxBatchesPerRun` above 100 changes nothing for TIMESTAMP: `@MaxBatches`
+is used in exactly two places and there is no batch counter in the loop. Only
+`MaxCandidates` bypasses that `CASE`.
+
+Candidates are read from the source **once** per run — there is no loop back to
+preparation for either strategy — so this is a hard ceiling on a whole run, not a
+per-batch throttle. It was measured before it was understood: `t_work_q` stopped
+at exactly 400 000 rows in 100 batches after 43 of its 60 seconds, with 200 000
+rows still eligible, and the validity check called it "TIME was the limit". With
+`MaxCandidates` set explicitly the same set ran the full 60 s and moved 408 432
+rows. The ANCHOR path computes `BatchDocCount × MaxBatchesPerRun` with **no**
+clamp, so it does not have this ceiling — the two strategies behave differently
+here.
+
+**A `Paused` batch is resumed with its ORIGINAL cutoff.** That is deliberate and
+correct: a backlog is worked through in consistent slices instead of being
+re-selected from scratch. It is also a trap whenever the underlying rows are
+replaced. Re-seeding test data changes the IDENTITY values of
+`t_pick_detail.pick_id` and `t_tran_log.tran_log_id`, so a resumed keyset
+addresses rows that no longer exist: the run reports `Status OK`, `DocsDone`
+78 000 and 210 000, `RowsDeleted` **0** — a result that looks like a measurement
+and is not one. The order set was worse: its keys are natural
+(`order_number`, `wh_id`), so they still matched and it deleted 47 800 rows
+against a cutoff from three days earlier. `usp_CloseDryRunWorkBatches` does not
+help — it closes dry-run batches only, exactly as its name says.
+
+The rule the package follows is **the script that deletes the rows invalidates the
+keys**: `40_perf_seed.sql` marks open batches `Failed` before it re-seeds,
+`99_cleanup_test.sql` does the same after it removes the test data, and
+`41_perf_test.sql` refuses to measure while one is present. `99` did not do this
+at first, and four `Paused` batches survived a cleanup holding keys for rows that
+no longer existed — with `arch.v_OperationalHealth` reporting `OPEN_WORKBATCH`
+("Open WorkBatch can block ANCHOR candidate preparation") until they were cleared.
+
+If you ever need to clear them by hand, `Failed` is the terminal status the
+product itself uses for a discarded batch:
+
+```sql
+UPDATE arch.WorkBatch
+SET Status = N'Failed', CompletedAtUtc = SYSUTCDATETIME()
+WHERE Status NOT IN (N'Completed', N'Failed');
+```
+
+Never do that on a production backlog: a `Paused` batch there holds real pending
+work, and discarding it means those rows are skipped until some later run
+happens to select them again.
 
 **`arch.usp_ValidateConfiguration` returns EIGHT columns**, not seven — Phase 14b
 (`v2\063`) adds a trailing `ActionKey`. A seven-column `INSERT ... EXEC` fails
@@ -298,6 +503,53 @@ in commit `452445f`.
 
 **`sqlcmd` without `-I` runs with `QUOTED_IDENTIFIER OFF`**, which fails on
 filtered indexes and on some DDL. Always pass `-I`.
+
+**Warehouse Advantage already purges `t_log_message`, and at 90 days retention we
+archive nothing.** ADV ships Agent job `Log Maintenance` → `ADV.usp_PurgeLog`,
+driven by three rows in `ADV.dbo.t_adv_control`:
+
+| Key | On WA01 | Effect |
+|---|---|---|
+| `LogPurgeMaximumDays` | 30 | deletes anything older than *n* days |
+| `LogPurgeMaximumSize` | 100 000 | above this many rows… |
+| `LogPurgeToSize` | 95 000 | …delete the **oldest** down to this, **regardless of age** |
+
+With a 90-day retention our cutoff selects rows older than 90 days and ADV deleted
+them at 30. **The two windows are disjoint and no amount of waiting fixes it** —
+the process reports success with zero rows for ever. Found empirically: 300 000
+seeded log rows vanished 29 seconds after the seed, with no archive run and no
+trace in `arch.Run`. `24_seed_logmessage_anchor.sql` therefore **clamps** the
+retention into the vendor window with a week of headroom (90 → **23** days here)
+and prints why. Set the ADV retention below `LogPurgeMaximumDays` or this set is
+decoration.
+
+The size cap cannot be defended against — it is age-blind — so the only answer is
+to run often enough that the table stays under it. `09_preflight_data.sql` reports
+the current count against the cap.
+
+**Disabling an Agent job does not stop it running.** `sp_update_job @enabled = 0`
+suppresses only *schedule*-driven execution; an explicit `sp_start_job` runs a
+disabled job perfectly happily. On WA01 the WA service does exactly that — msdb
+history shows `The Job was invoked by User HJS` at 14:53 and again at 15:08, the
+second one **while the job was disabled**, in the middle of a measurement. It
+trimmed `t_log_message` mid-run, which is why that ADV figure came out at 1 277
+rows/s instead of 2 949, and why 26 000 prepared keys pointed at rows that had
+just been deleted (`DocsDone` 86 000 vs `RowsDeleted` 60 000). Never treat a
+disabled job as a guarantee: verify from `msdb.dbo.sysjobhistory` that it did not
+run, which is what `41_perf_test.sql`'s `PURGE_INTERFERENCE` section does.
+
+**A stale `arch.IndexRequirement` produces a warning nobody can action.** If
+`19_add_logmessage_key.sql` was ever run, its requirement on `kam_row_id` survives
+the column being dropped, and `usp_ValidateConfiguration` then reports "At least
+one required index column does not exist on the source table" on every run, for
+ever. A permanent un-actionable WARN is worse than no check — it trains whoever
+reads the validation to ignore warnings. `24_seed_logmessage_anchor.sql` now
+removes any requirement whose columns are genuinely absent, verified against the
+source catalogue.
+
+**`OUTPUT` cannot contain a subquery** (`Msg 10705`) and cannot reference a joined
+table — only the target row and `inserted`/`deleted`. Capture the bare facts and
+join afterwards.
 
 **`sys.columns` is not cross-database.** `OBJECT_ID('OtherDb.dbo.t')` resolves a
 three-part name, but `sys.columns` only holds the current database's objects — so
@@ -333,9 +585,38 @@ EXEC arch.usp_Api_SetRetentionFloor @MinRetentionDays = 365, @RequestedBy = 'dba
 
 Individual documents can be pinned with `arch.usp_Api_AddLegalHold`.
 
-**Size the first run.** `JOB_DEFAULT` has no `MaxCandidates`, so it takes
-everything eligible — on this instance that was 13 903 log rows in one pass. For a
-first production run, cap it.
+**The ADV retention is not the one you asked for.** `t_log_message` is already
+purged by the vendor, so `24_seed_logmessage_anchor.sql` clamps this one process
+into that window — a requested 90 days becomes **23** on WA01
+(`LogPurgeMaximumDays` 30, minus a week of headroom). At the requested value the
+process would archive nothing at all, for ever. The script prints
+`*** RETENTION CLAMPED ***` with the arithmetic; the operational note above
+explains why.
+
+**Size the first run — and `MaxCandidates = NULL` does not mean "everything".**
+For an ANCHOR process it means `BatchDocCount × MaxBatchesPerRun` (500 000 with
+the shipped values). For a **TIMESTAMP** process it means a hard **400 000 rows
+per invocation**, whatever the window length, because the runner clamps its own
+default to 100 batches of 4000 — see the operational note. `JOB_DEFAULT` ships
+with `MaxCandidates = NULL`, so `AAD_WORKQ_ARCH` is currently limited to 400 000
+rows per run.
+
+Whether to change that is a tuning decision, not a defect, and it cuts both ways:
+
+```sql
+-- Raise the TIMESTAMP ceiling. Note this raises it for EVERY process in the
+-- profile, including the ANCHOR sets, whose candidate preparation then costs
+-- more up front (11 s for 600 000 keys on WA01).
+EXEC arch.usp_Api_SaveRunProfile @RunProfileCode = N'JOB_DEFAULT', ...
+     @MaxCandidates = 2000000, ...;
+```
+
+At the measured rates, 400 000 rows of `t_work_q` is about 60 seconds of a
+55-minute window — so with the shipped configuration that set idles for 54 of
+them once it is caught up, and cannot catch up at all on a large backlog. Either
+raise `MaxCandidates`, or schedule the job more often and accept a fixed ceiling
+per invocation. On a backlog, the second option is a per-run cap you can reason
+about; the first is faster but makes one run hold locks for longer.
 
 ---
 

@@ -65,7 +65,7 @@ param(
     # Folder that contains Databases\, kArchiveManagerAdmin\ and deploy\.
     [string] $RepoRoot = 'C:\Users\admin\source\repos\WMSArchiveManager\legacy\ArchiveManager1.0',
 
-    [ValidateSet('precheck','analyse','deploy','configure','runtime','test','realrun','cleanup','all')]
+    [ValidateSet('precheck','analyse','deploy','configure','runtime','test','realrun','perf','perfrestore','cleanup','all')]
     [string] $Stage = 'precheck',
 
     # Required for -Stage realrun and -Stage cleanup.
@@ -307,6 +307,49 @@ switch ($Stage) {
         Write-Host "Check 23_verify_standalone.log:" -ForegroundColor Yellow
         Write-Host "  section B  - every row must reconcile" -ForegroundColor Yellow
         Write-Host "  section C  - C_ORPHAN_CHECK must be 0 / 0 / 0" -ForegroundColor Yellow
+    }
+
+    'perf' {
+        # Throughput measurement. This is NOT part of a normal deployment - it
+        # seeds millions of rows into the source databases and then archives and
+        # deletes them, and it temporarily lifts the batching caps and disables
+        # the vendor log purge job. Only worth running on an instance where that
+        # is acceptable, which is why it demands -IConfirm like the real run.
+        if (-not $IConfirm) {
+            throw "-Stage perf seeds millions of test rows, then ARCHIVES AND DELETES them, and temporarily changes the batching caps and the vendor 'Log Maintenance' job. Re-run with -IConfirm."
+        }
+        # try/finally, NOT two bare calls. 40_perf_seed.sql disables the vendor
+        # 'Log Maintenance' job and then spends minutes bulk-seeding; any error in
+        # there aborts the script with the job still disabled, i.e. ADV's own log
+        # housekeeping silently switched off in the customer's WMS. Without the
+        # finally the stage would stop at that point and never even mention the
+        # undo. -AllowFailure on the restore so a broken restore cannot mask the
+        # original error that got us here.
+        try {
+            Invoke-SqlFile (Join-Path $sqlDir '40_perf_seed.sql')
+            Invoke-SqlFile (Join-Path $sqlDir '41_perf_test.sql')
+
+            Write-Host ""
+            Write-Host "Read 41_perf_test.log in this order - the checks come before the numbers:" -ForegroundColor Yellow
+            Write-Host "  CAPS_RESTORED / VENDOR_JOB_RESTORED - nothing was left changed" -ForegroundColor Yellow
+            Write-Host "  COVERAGE            - every set produced a run" -ForegroundColor Yellow
+            Write-Host "  VALIDITY            - StillEligible > 0, or the figure is a volume" -ForegroundColor Yellow
+            Write-Host "  PURGE_INTERFERENCE  - must be empty for the ADV figure to be clean" -ForegroundColor Yellow
+            Write-Host "  PERF_BY_TABLE       - the per-table answer" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Then run -Stage cleanup -IConfirm. The seeded rows are large enough to matter." -ForegroundColor Yellow
+        }
+        finally {
+            Write-Host ""
+            Write-Host "Verifying that nothing was left changed (42_perf_restore.sql) ..." -ForegroundColor Cyan
+            Invoke-SqlFile (Join-Path $sqlDir '42_perf_restore.sql') -AllowFailure | Out-Null
+            Write-Host "If that log still shows STILL_PENDING or CAP_UNRECOVERABLE, act on it before leaving the instance." -ForegroundColor Yellow
+        }
+    }
+
+    'perfrestore' {
+        # Standalone undo for a perf cycle that died before restoring.
+        Invoke-SqlFile (Join-Path $sqlDir '42_perf_restore.sql')
     }
 
     'cleanup' {

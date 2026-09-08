@@ -63,6 +63,9 @@
 :setvar AdminDb   "kArchiveManagerAdmin"
 :setvar AdvDb     "ADV"
 :setvar ArchiveDb "kArchiveManagerBackups"
+-- RetentionDays is a REQUEST, not the final value: it is clamped to sit inside
+-- ADV's own log purge window (t_adv_control.LogPurgeMaximumDays). See the block
+-- above the usp_Api_SaveProcess call - at 90 days this process archives nothing.
 :setvar RetentionDays "90"
 :setvar ProcessCode "ADV_LOGMSG_ARCH"
 
@@ -90,6 +93,68 @@ DECLARE @OsId   int            = NULL;
 DECLARE @AnchorTs nvarchar(4000) =
     N'TRY_CONVERT(datetime2, a.logged_on_utc) AT TIME ZONE N''UTC'' AT TIME ZONE N''UTC''';
 
+-------------------------------------------------------------------------------
+-- WAREHOUSE ADVANTAGE ALREADY PURGES THIS TABLE, AND IT WILL WIN
+--
+-- ADV ships its own housekeeping: Agent job 'Log Maintenance' -> ADV.usp_PurgeLog,
+-- driven by three rows in ADV.dbo.t_adv_control:
+--     LogPurgeMaximumDays  DELETE ... WHERE DATEDIFF(day, logged_on_utc, GETUTCDATE()) > n
+--     LogPurgeMaximumSize  if COUNT(*) exceeds this, delete oldest down to
+--     LogPurgeToSize       ... this many rows, REGARDLESS OF AGE
+-- On the reference instance: 30 days / 100000 rows / 95000 rows.
+--
+-- So a retention of 90 days archives NOTHING, EVER. Our cutoff would select rows
+-- older than 90 days; ADV deleted them at 30. The two windows are disjoint and no
+-- amount of waiting fixes it - the run reports success with zero rows forever.
+-- This was found empirically: 300000 seeded log rows vanished 29 seconds after
+-- the seed finished, with no archive run and no trace in arch.Run.
+--
+-- Retention is therefore CLAMPED to sit inside ADV's own window, with a week of
+-- headroom so a late run still finds rows. kArchiveManager then captures the
+-- messages into the archive database BEFORE ADV discards them, which is the whole
+-- point of archiving a table that something else already prunes.
+--
+-- The size cap is NOT defended against here - it is age-blind, so if the table
+-- exceeds LogPurgeMaximumSize the purge takes the oldest rows whatever we do. The
+-- only real answer is to run often enough that the table stays under the cap;
+-- 09_preflight_data.sql reports the current count against it.
+-------------------------------------------------------------------------------
+DECLARE @Requested int = $(RetentionDays);
+DECLARE @PurgeDays int, @PurgeMaxRows int, @PurgeToRows int;
+
+DECLARE @ctl nvarchar(max) =
+    N'SELECT @d = MAX(CASE WHEN string_key = ''LogPurgeMaximumDays'' THEN TRY_CONVERT(int, string_value) END),
+             @m = MAX(CASE WHEN string_key = ''LogPurgeMaximumSize'' THEN TRY_CONVERT(int, string_value) END),
+             @t = MAX(CASE WHEN string_key = ''LogPurgeToSize''      THEN TRY_CONVERT(int, string_value) END)
+      FROM ' + QUOTENAME(N'$(AdvDb)') + N'.dbo.t_adv_control;';
+EXEC sys.sp_executesql @ctl,
+     N'@d int OUTPUT, @m int OUTPUT, @t int OUTPUT',
+     @d = @PurgeDays OUTPUT, @m = @PurgeMaxRows OUTPUT, @t = @PurgeToRows OUTPUT;
+
+DECLARE @Effective int = @Requested;
+
+IF @PurgeDays IS NULL
+    PRINT 'INFO: no LogPurgeMaximumDays in t_adv_control - keeping the requested retention of '
+          + CAST(@Requested AS varchar(10)) + ' days. Verify that nothing else prunes this table.';
+ELSE IF @PurgeDays > 0 AND @Requested >= @PurgeDays
+BEGIN
+    SET @Effective = CASE WHEN @PurgeDays - 7 < 1 THEN 1 ELSE @PurgeDays - 7 END;
+    PRINT '*** RETENTION CLAMPED ***';
+    PRINT '    requested        : ' + CAST(@Requested AS varchar(10)) + ' days';
+    PRINT '    ADV purges after : ' + CAST(@PurgeDays AS varchar(10)) + ' days (t_adv_control.LogPurgeMaximumDays)';
+    PRINT '    effective        : ' + CAST(@Effective AS varchar(10)) + ' days';
+    PRINT '    Reason: at the requested value every eligible row would already have been';
+    PRINT '    deleted by ADV.usp_PurgeLog, so this process would archive nothing at all.';
+END
+ELSE
+    PRINT 'INFO: requested retention (' + CAST(@Requested AS varchar(10))
+          + ' d) is inside the ADV purge window (' + CAST(@PurgeDays AS varchar(10)) + ' d). No clamp needed.';
+
+IF @PurgeMaxRows > 0
+    PRINT 'INFO: ADV also enforces a size cap - over ' + CAST(@PurgeMaxRows AS varchar(10))
+          + ' rows it deletes the oldest down to ' + CAST(ISNULL(@PurgeToRows, 0) AS varchar(10))
+          + ' regardless of age. Run this process often enough to stay under that.';
+
 EXEC arch.usp_Api_SaveProcess
     @ProcessCode               = @Pc,
     @RequestedBy               = @By,
@@ -97,7 +162,7 @@ EXEC arch.usp_Api_SaveProcess
     @Description               = N'ADV application log history (t_log_message), anchored on its natural composite key.',
     @IsEnabled                 = 1,
     @Mode                      = 1,
-    @RetentionDays             = $(RetentionDays),
+    @RetentionDays             = @Effective,
     @CutoffSafetyLagMinutes    = 1440,
     @CutoffMode                = 0,
     @BatchDocCount             = 2000,   -- one "document" == one log row
@@ -238,6 +303,58 @@ EXEC arch.usp_Api_SaveIndexRequirement
     @IsMandatory        = 0,
     @Notes              = N'Satisfied by the existing clustered i_log_message, which leads on logged_on_utc - both the retention scan and the delete join can seek it.',
     @ConfigChangeSetId  = @CsId OUTPUT;
+GO
+
+-------------------------------------------------------------------------------
+-- DROP ANY REQUIREMENT LEFT BEHIND BY 19_add_logmessage_key.sql
+--
+-- That script (now marked DO NOT USE - it adds a column to a vendor table) also
+-- registers a JOIN requirement on kam_row_id. If it was ever run, the row stays
+-- in arch.IndexRequirement after the column is gone, and usp_ValidateConfiguration
+-- then reports "At least one required index column does not exist on the source
+-- table" on EVERY run, for ever. A permanent WARN that cannot be actioned is
+-- worse than no check: it trains whoever reads the validation to ignore warnings.
+--
+-- There is no API procedure to delete a requirement - usp_Api_SaveIndexRequirement
+-- only inserts or updates - so this is a direct DELETE. It is confined to
+-- kArchiveManagerAdmin, which is ours, and it removes only requirements whose key
+-- columns genuinely do not exist on the source table, verified against the source
+-- catalog rather than by name. sys.columns is not cross-database, hence dynamic SQL.
+-------------------------------------------------------------------------------
+DECLARE @Pc2 sysname = N'$(ProcessCode)';
+DECLARE @Stale table (IndexRequirementId int PRIMARY KEY, KeyColumnsCsv nvarchar(1000), MissingCol sysname);
+
+-- One row per requirement, not per missing column: a requirement listing two
+-- absent columns would otherwise arrive twice and violate the table variable's
+-- primary key. Both sides of the name comparison are forced to one collation -
+-- sys.columns.name carries the SOURCE database's collation while the CSV carries
+-- the admin database's, and on a case-sensitive instance that pairing raises
+-- Msg 451 rather than simply not matching.
+DECLARE @probe nvarchar(max) = N'
+SELECT ir.IndexRequirementId, ir.KeyColumnsCsv, MIN(s.value)
+FROM arch.IndexRequirement ir
+JOIN arch.Process p ON p.ProcessId = ir.ProcessId
+CROSS APPLY STRING_SPLIT(ir.KeyColumnsCsv, '','') s
+WHERE p.ProcessCode = @Pc
+  AND NOT EXISTS (SELECT 1 FROM ' + QUOTENAME(N'$(AdvDb)') + N'.sys.columns c
+                  WHERE c.object_id = OBJECT_ID(N''$(AdvDb)'' + N''.'' + QUOTENAME(ir.SourceSchema) + N''.'' + QUOTENAME(ir.SourceTable))
+                    AND c.name COLLATE DATABASE_DEFAULT = LTRIM(RTRIM(s.value)) COLLATE DATABASE_DEFAULT)
+GROUP BY ir.IndexRequirementId, ir.KeyColumnsCsv;';
+
+INSERT @Stale(IndexRequirementId, KeyColumnsCsv, MissingCol)
+EXEC sys.sp_executesql @probe, N'@Pc sysname', @Pc = @Pc2;
+
+IF EXISTS (SELECT 1 FROM @Stale)
+BEGIN
+    SELECT Section = 'STALE_INDEX_REQUIREMENT_REMOVED', s.IndexRequirementId,
+           s.KeyColumnsCsv, MissingColumn = s.MissingCol,
+           Reason = 'column absent from the source table - almost certainly left by 19_add_logmessage_key.sql'
+    FROM @Stale s;
+
+    DELETE ir FROM arch.IndexRequirement ir JOIN @Stale s ON s.IndexRequirementId = ir.IndexRequirementId;
+END
+ELSE
+    PRINT 'INFO: no stale index requirements for this process.';
 GO
 
 PRINT '24_seed_logmessage_anchor: configuration applied.';
