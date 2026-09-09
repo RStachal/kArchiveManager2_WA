@@ -1,61 +1,76 @@
 -- ============================================================================
--- 40 - PERFORMANCE TEST DATA (bulk seed)
+-- 40 - BULK TEST DATA FOR ALL SIX SETS (volume correctness + throughput)
 -- ============================================================================
--- Seeds enough archivable rows that a one-minute run CANNOT exhaust them, so the
--- measured number is a THROUGHPUT and not just "how much test data there was".
--- 41_perf_test.sql checks that explicitly and refuses to report a rate if the
--- data ran out.
+-- Seeds every table of every configured set to a realistic volume - 10 000 to
+-- 100 000 rows each - and serves TWO tests from the same data:
 --
--- Tagged exactly like 30_test_data_all.sql, so 99_cleanup_test.sql removes it:
---   t_order            order_number LIKE 'KAMT-%'
---   t_tran_log         generic_text1 = 'KAMTEST'
---   t_pick_detail      lot_number    = 'KAMTEST'
---   t_work_q           work_q_id LIKE 'KAMTQ%'
---   ADV.t_log_message  machine_id    = 'KAMTEST'
+--   1) CORRECTNESS AT VOLUME. Does the configuration process exactly the rows it
+--      is supposed to, and nothing else, when there are hundreds of thousands of
+--      them? Verified by 33_verify_bulk.sql.
+--   2) THROUGHPUT. How many rows are copied to the archive and deleted from the
+--      source in one minute? Measured by 41_perf_test.sql.
 --
--- ALL ROWS ARE ELIGIBLE: dates well before the cutoff and terminal states
--- (order status 'S', pick 'SHIPPED', work_status 'C'). The functional gates are
--- already proven by 30_test_data_all.sql; this seed exists purely to measure rate.
+-- A SIGNIFICANT PART OF THE DATA MUST SURVIVE, AND THAT IS THE POINT
 --
--- SIZING. Published figures for this product are ~3.2k rows/s unoptimised and
--- ~5k rows/s with index parking, so a 60-second window moves roughly 200-300k
--- rows. The defaults below give every set a comfortable multiple of that. They
--- are per-table row counts, not document counts.
+-- Earlier versions of this script seeded only eligible rows, because their only
+-- job was to measure a rate. That cannot answer "were ONLY the configured rows
+-- processed" - if everything is eligible, a predicate that matches too much looks
+-- identical to one that is correct. So every set now also gets GATED rows, at
+-- volume, each held back for a specific reason:
 --
--- t_work_q is deliberately the largest: it is by far the fastest set (single
--- table, TIMESTAMP strategy, 4000-row transactions) and 200000 rows were consumed
--- in 29 seconds on the reference instance - i.e. it ran out of data and produced
--- a volume instead of a rate. 600000 keeps it busy for the full window.
+--   set          eligible                       gated, and why it must survive
+--   TRANLOG      start_tran_date past cutoff    dated inside the retention window
+--   PICKDETAIL   status SHIPPED, old            status PICKED (not terminal)
+--   WORKQ        work_status C, old             work_status R (not in C/P)
+--   ORDER        status S, shipped long ago     status U (not terminal)
+--   PO           status C, closed long ago      status O (still open)
+--   LOGMSG       inside the archivable age band n/a - see the ADV note below
+--
+-- GatedPct sets the proportion. At the default 20 the verification has roughly
+-- one gated row in five to check, which is enough to catch an over-matching
+-- predicate without halving the volume available to the rate test.
+--
+-- TAGS - 99_cleanup_test.sql removes all of these
+--   t_order            order_number LIKE 'KAMT-%'      t_work_q  work_q_id LIKE 'KAMTQ%'
+--   t_tran_log         generic_text1 = 'KAMTEST'       t_pick_detail lot_number = 'KAMTEST'
+--   t_po_master        po_number LIKE 'KAMPO-B%'       t_rcpt_ship shipment_number LIKE 'KAMSH-B%'
+--   t_pick_container   container_id LIKE 'KAMTC-B%'    ADV.t_log_message machine_id = 'KAMTEST'
 --
 -- NOTE ON REALISM: this instance has NO custom indexes in the WMS databases (see
--- the house rule in 08_source_indexes.sql), so these numbers are the honest
--- no-index throughput - which is exactly the production scenario. t_tran_log and
--- t_log_message do have a usable native index on their cutoff column; t_order,
--- t_pick_detail and t_work_q do not, so expect them to be slower per row.
+-- the house rule in 08_source_indexes.sql), so the resulting figures are the
+-- honest no-index throughput - which is exactly the production scenario.
+-- t_tran_log and t_log_message do have a usable native index on their cutoff
+-- column; t_order, t_pick_detail, t_work_q and t_po_master do not, so expect
+-- them to be slower per row.
 --
--- Seeding itself takes a few minutes. Reduce the counts for a quick smoke.
+-- Seeding takes a few minutes. Reduce the counts for a quick smoke.
 -- ============================================================================
 :setvar WmsDb "AAD"
 :setvar AdvDb "ADV"
 :setvar AdminDb "kArchiveManagerAdmin"
--- Every count below is sized so a 60-second run CANNOT drain it. Measured rates
--- on the reference instance, with the volume one minute consumes:
---   t_pick_detail  5405 rows/s -> ~325k    t_tran_log  4654 rows/s -> ~280k
---   t_work_q       9302 rows/s -> ~560k    t_order      163 docs/s -> ~10k docs
--- Doubling those leaves room for a faster machine.
-:setvar TranLogRows "600000"
-:setvar PickRows "600000"
-:setvar WorkQRows "800000"
-:setvar OrderDocs "60000"
+-- Header counts. Every table of every set lands between 10 000 and 100 000 rows,
+-- which is the band this data set is specified for. The child multipliers below
+-- are chosen to keep the child tables inside it too - a child seeded for every
+-- tenth parent would fall under 10 000 at these header volumes.
+:setvar TranLogRows "75000"
+:setvar PickRows "75000"
+:setvar WorkQRows "75000"
+:setvar OrderDocs "25000"
+:setvar PoDocs "25000"
 -- LogRows is a REQUEST. ADV enforces a hard row cap on t_log_message
 -- (t_adv_control.LogPurgeMaximumSize) and trims the OLDEST rows down to
 -- LogPurgeToSize regardless of age, so the real budget is computed below and
 -- this value is only an upper bound.
 :setvar LogRows "300000"
--- Fraction of parent rows that get child rows. 10 means every 10th parent, which
--- exercises the child joins and gives each child table a measurable rate without
--- doubling the volume of the set.
-:setvar ChildEvery "10"
+-- Percentage of each set's headers that must be GATED - held back by the
+-- configuration. 0 turns this back into a pure rate seed.
+:setvar GatedPct "20"
+-- Child rows for every Nth parent. 5 keeps t_allocation, the tran-log children
+-- and the work-queue children at ~15 000 rows each.
+:setvar ChildEvery "5"
+-- Comment tables are seeded for every Nth parent separately: at ChildEvery they
+-- would fall below 10 000.
+:setvar CommentEvery "2"
 -- The ADV log purge (see the block below) must be held off for the whole
 -- seed + measure cycle. Set to 0 only if you accept that ADV gets no figure.
 :setvar SuspendAdvLogPurge "1"
@@ -231,13 +246,23 @@ DELETE FROM dbo.t_work_q            WHERE work_q_id LIKE N'KAMTQ%';
 DELETE FROM dbo.t_tran_log_reason   WHERE tran_log_id IN (SELECT tran_log_id FROM dbo.t_tran_log WHERE generic_text1 = N'KAMTEST');
 DELETE FROM dbo.t_tran_log_sn       WHERE tran_log_id IN (SELECT tran_log_id FROM dbo.t_tran_log WHERE generic_text1 = N'KAMTEST');
 DELETE FROM dbo.t_tran_log          WHERE generic_text1 = N'KAMTEST';
+DELETE FROM dbo.t_pick_task_uom     WHERE lot_number = N'KAMTEST' OR cartonization_batch_id LIKE N'KAMTB-B%';
 DELETE FROM dbo.t_allocation        WHERE pick_id IN (SELECT pick_id FROM dbo.t_pick_detail WHERE lot_number = N'KAMTEST');
 DELETE FROM dbo.t_pick_detail       WHERE lot_number = N'KAMTEST';
+DELETE FROM dbo.t_pick_container       WHERE container_id LIKE N'KAMTC-B%' OR order_number LIKE N'KAMT-%';
 DELETE FROM dbo.t_pack                 WHERE order_number LIKE N'KAMT-%';
 DELETE FROM dbo.t_order_detail_comment WHERE order_number LIKE N'KAMT-%';
 DELETE FROM dbo.t_order_comment        WHERE order_number LIKE N'KAMT-%';
 DELETE FROM dbo.t_order_detail         WHERE order_number LIKE N'KAMT-%';
 DELETE FROM dbo.t_order                WHERE order_number LIKE N'KAMT-%';
+-- PO family. The junction goes first: it has a NO_ACTION FK to t_po_master and a
+-- CASCADE FK from t_rcpt_ship, so neither parent can be removed while it exists.
+DELETE FROM dbo.t_rcpt_ship_po      WHERE po_number LIKE N'KAMPO-B%' OR shipment_number LIKE N'KAMSH-B%';
+DELETE FROM dbo.t_po_detail_comment WHERE po_number LIKE N'KAMPO-B%';
+DELETE FROM dbo.t_po_comment        WHERE po_number LIKE N'KAMPO-B%';
+DELETE FROM dbo.t_po_detail         WHERE po_number LIKE N'KAMPO-B%';
+DELETE FROM dbo.t_po_master         WHERE po_number LIKE N'KAMPO-B%';
+DELETE FROM dbo.t_rcpt_ship         WHERE shipment_number LIKE N'KAMSH-B%';
 GO
 USE [$(AdvDb)];
 GO
@@ -251,7 +276,21 @@ GO
 USE [$(WmsDb)];
 GO
 
-PRINT 'Seeding t_tran_log ($(TranLogRows) rows) ...';
+/* ---------------------------------------------------------------------------
+   HOW A ROW IS MADE GATED
+
+   Every seed below decides per row with  (n.i % 100) < $(GatedPct)  - a
+   deterministic, evenly spread fraction. Deterministic matters: the verification
+   in 33_verify_bulk.sql recomputes the same expression to know exactly which
+   rows must still be there, so a re-run compares like with like.
+
+   The gate used is ALWAYS the one the configuration actually tests, never an
+   invented column: a status outside the terminal set, or a date inside the
+   retention window. A gated row that is gated for a reason the configuration
+   does not look at would prove nothing.
+   --------------------------------------------------------------------------- */
+
+PRINT 'Seeding t_tran_log ($(TranLogRows) rows, $(GatedPct)% gated) ...';
 ;WITH n AS
 (
     SELECT TOP ($(TranLogRows)) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
@@ -262,15 +301,19 @@ INSERT dbo.t_tran_log
      item_number, tran_qty, expiration_date, generic_text1)
 SELECT
     N'340', N'ADO', N'K01', 0,
-    -- spread over 2024-01-01 .. 2025-12-31, all comfortably before the cutoff
-    DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
+    -- Eligible rows spread over 2024-01-01 .. 2025-12-31, well before the cutoff.
+    -- Gated rows are dated in the last 30 days, i.e. INSIDE the retention window,
+    -- which is the only thing this set's cutoff tests.
+    CASE WHEN (n.i % 100) < $(GatedPct)
+         THEN DATEADD(DAY, -(n.i % 30), CONVERT(datetime, SYSUTCDATETIME()))
+         ELSE DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')) END,
     '1900-01-01 08:00:00',
     N'PRODUKT1', 1, '1900-01-01', N'KAMTEST'
 FROM n;
 PRINT '  rows: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
-PRINT 'Seeding t_pick_detail ($(PickRows) rows) ...';
+PRINT 'Seeding t_pick_detail ($(PickRows) rows, $(GatedPct)% gated) ...';
 ;WITH n AS
 (
     SELECT TOP ($(PickRows)) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
@@ -282,14 +325,17 @@ INSERT dbo.t_pick_detail
 SELECT
     N'K01',
     N'KAMT-PF' + CONVERT(nvarchar(12), n.i),
-    N'1', N'PRODUKT1', N'SHIPPED',
+    N'1', N'PRODUKT1',
+    -- The pick set gates on status = 'SHIPPED'. 'PICKED' is a real intermediate
+    -- state, so a gated row here is one that is genuinely still in flight.
+    CASE WHEN (n.i % 100) < $(GatedPct) THEN N'PICKED' ELSE N'SHIPPED' END,
     DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
     1, 1, 1, N'KAMTEST'
 FROM n;
 PRINT '  rows: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
-PRINT 'Seeding t_work_q ($(WorkQRows) rows) ...';
+PRINT 'Seeding t_work_q ($(WorkQRows) rows, $(GatedPct)% gated) ...';
 ;WITH n AS
 (
     SELECT TOP ($(WorkQRows)) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
@@ -300,7 +346,10 @@ INSERT dbo.t_work_q
      item_number, qty, datetime_stamp, location_id)
 SELECT
     N'KAMTQ' + CONVERT(nvarchar(20), n.i),
-    N'03', N'C', N'30', N'K01', N'perf',
+    N'03',
+    -- This set gates on work_status IN ('C','P'). 'R' (released) is outside it.
+    CASE WHEN (n.i % 100) < $(GatedPct) THEN N'R' ELSE N'C' END,
+    N'30', N'K01', N'perf',
     N'PRODUKT1', 1,
     DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
     N'B001'
@@ -308,7 +357,7 @@ FROM n;
 PRINT '  rows: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
-PRINT 'Seeding the order document set ($(OrderDocs) documents) ...';
+PRINT 'Seeding the order document set ($(OrderDocs) documents, $(GatedPct)% gated) ...';
 -- client_code AND display_order_number are supplied so the vendor trigger
 -- tr_order_master_insert short-circuits instead of running its UPDATE per row.
 ;WITH n AS
@@ -322,7 +371,8 @@ INSERT dbo.t_order
 SELECT
     N'K01',
     N'KAMT-OF' + CONVERT(nvarchar(12), n.i),
-    N'S',
+    -- The order set gates on status IN ('S','D'). 'U' is outside it.
+    CASE WHEN (n.i % 100) < $(GatedPct) THEN N'U' ELSE N'S' END,
     DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
     DATEADD(DAY, (n.i % 730) + 1, CONVERT(datetime, '2024-01-01')),
     N'K01',
@@ -349,13 +399,38 @@ WHERE o.order_number LIKE N'KAMT-OF%';
 PRINT '  comments: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
--- Allocations for a tenth of the picks, so the child join is exercised without
+-- Allocations for every Nth pick, so the child join is exercised without
 -- doubling the pick volume.
 INSERT dbo.t_allocation(wh_id, pick_id, item_number, pick_location, pick_area, quantity, work_type, pick_rule)
 SELECT N'K01', p.pick_id, N'PRODUKT1', N'B001', N'A1', 1, N'03', N'FIFO'
 FROM dbo.t_pick_detail p
 WHERE p.lot_number = N'KAMTEST' AND p.pick_id % $(ChildEvery) = 0;
 PRINT '  allocations: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- t_pick_container: one per order, added to the ORDER set by 26.
+-- container_id is part of pk_pick_container (wh_id, container_id) so it must be
+-- unique; the order number supplies that. Note these hang off the ORDER, not the
+-- pick - a container is shared across the picks of one order.
+INSERT dbo.t_pick_container (container_id, wh_id, cartonization_batch_id, order_number,
+                             status, create_date, target_ship_date, actual_ship_date)
+SELECT N'KAMTC-B' + SUBSTRING(o.order_number, 8, 20), o.wh_id,
+       N'KAMTB-B' + SUBSTRING(o.order_number, 8, 20), o.order_number,
+       N'ACTIVE', o.order_date, o.actual_ship_date, o.actual_ship_date
+FROM dbo.t_order o
+WHERE o.order_number LIKE N'KAMT-OF%';
+PRINT '  t_pick_container: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- t_pick_task_uom: one per pick, added to the PICKDETAIL set by 26. lot_number is
+-- set to the test tag so the cleanup can find rows even if the batch id changes.
+INSERT dbo.t_pick_task_uom (wh_id, cartonization_batch_id, planned_actual, line_number,
+                            pick_id, item_number, lot_number, uom, pattern, qty)
+SELECT p.wh_id, N'KAMTB-B' + CONVERT(nvarchar(20), p.pick_id), N'P', p.line_number,
+       p.pick_id, N'PRODUKT1', N'KAMTEST', N'EA', N'STD', 1
+FROM dbo.t_pick_detail p
+WHERE p.lot_number = N'KAMTEST';
+PRINT '  t_pick_task_uom: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
 /* =========================================================================
@@ -390,11 +465,13 @@ GO
 
 -- t_order children. comment_type and sequence carry defaults; line_number is
 -- nvarchar, and must match the value used for t_order_detail above ('1' / '2').
+-- CommentEvery, not ChildEvery: at these header volumes ChildEvery would put this
+-- table under the 10 000-row floor this data set is specified for.
 INSERT dbo.t_order_detail_comment(wh_id, order_number, line_number, item_number, comment_text)
 SELECT o.wh_id, o.order_number, N'1', N'PRODUKT1', N'perf line comment'
 FROM dbo.t_order o
 WHERE o.order_number LIKE N'KAMT-OF%'
-  AND CONVERT(int, SUBSTRING(o.order_number, 8, 12)) % $(ChildEvery) = 0;
+  AND CONVERT(int, SUBSTRING(o.order_number, 8, 12)) % $(CommentEvery) = 0;
 PRINT '  t_order_detail_comment: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
@@ -454,6 +531,111 @@ WHERE q.work_q_id LIKE N'KAMTQ%'
   AND EXISTS (SELECT 1 FROM dbo.t_work_q q2
               WHERE q2.work_q_id = N'KAMTQ' + CONVERT(nvarchar(20), CONVERT(int, SUBSTRING(q.work_q_id, 6, 20)) + 1));
 PRINT '  t_work_q_dependency: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+/* =========================================================================
+   THE PURCHASE ORDER SET (AAD_PO_ARCH, added by 27)
+
+   The inbound mirror of the order set, and the only set whose children include a
+   junction to a document we do NOT archive (t_rcpt_ship). The shipments are
+   seeded here as well, precisely so that the junction has a real second parent -
+   without them the exposure that section D of 27 measures could not occur, and a
+   test that cannot reproduce a risk does not cover it.
+
+   Half the shipments are left OPEN (status 'O'). Those are the ones section D
+   counts: their purchase order is archivable, so the link row goes with it and
+   the live shipment loses it.
+   ========================================================================= */
+PRINT 'Seeding the PO document set ($(PoDocs) documents, $(GatedPct)% gated) ...';
+
+-- client_code and display_po_number are supplied for the same reason as on the
+-- order side: tr_po_master_insert would otherwise default client_code to wh_id
+-- and violate fk_po_master_client_code.
+;WITH n AS
+(
+    SELECT TOP ($(PoDocs)) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT dbo.t_po_master
+    (po_number, wh_id, status, create_date, closed_date,
+     client_code, display_po_number, vendor_code, residential_flag)
+SELECT
+    N'KAMPO-B' + CONVERT(nvarchar(12), n.i),
+    N'K01',
+    -- This set gates on status = 'C'. 'O' (open) is the default state and is
+    -- outside it, so a gated row here is a purchase order still being received.
+    CASE WHEN (n.i % 100) < $(GatedPct) THEN N'O' ELSE N'C' END,
+    DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
+    -- closed_date must be NULL when the order is open: that is what the WMS does,
+    -- and the cutoff comparison against NULL is UNKNOWN, which is the second half
+    -- of this set's gate.
+    CASE WHEN (n.i % 100) < $(GatedPct) THEN NULL
+         ELSE DATEADD(DAY, (n.i % 730) + 1, CONVERT(datetime, '2024-01-01')) END,
+    N'K01',
+    N'KAMPO-B' + CONVERT(nvarchar(12), n.i),
+    N'VENDOR1', N'N'
+FROM n;
+PRINT '  headers: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- Two lines per PO. schedule_number is left to its default of 0 and is part of
+-- pk_po_detail; the detail-comment FK carries it too and both must agree.
+INSERT dbo.t_po_detail (po_number, line_number, item_number, wh_id, qty, location_id, closed_date)
+SELECT m.po_number, l.n, N'PRODUKT1', N'K01', 10, N'B001', m.closed_date
+FROM dbo.t_po_master m
+CROSS JOIN (VALUES (N'1'), (N'2')) AS l(n)
+WHERE m.po_number LIKE N'KAMPO-B%';
+PRINT '  detail lines: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+INSERT dbo.t_po_comment (po_number, wh_id, comment_type, comment_text, sequence, comment_date)
+SELECT m.po_number, m.wh_id, N'R', N'bulk seed header comment', 0, m.create_date
+FROM dbo.t_po_master m
+WHERE m.po_number LIKE N'KAMPO-B%'
+  AND CONVERT(int, SUBSTRING(m.po_number, 8, 20)) % $(CommentEvery) = 0;
+PRINT '  header comments: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- The CASCADE victims: t_po_detail_comment cascades from t_po_detail, so these
+-- are what prove the delete order at volume. If the archiver deleted the detail
+-- before copying them, archived would fall below deleted.
+INSERT dbo.t_po_detail_comment (wh_id, po_number, line_number, item_number, comment_text)
+SELECT d.wh_id, d.po_number, d.line_number, N'PRODUKT1', N'bulk seed line comment'
+FROM dbo.t_po_detail d
+WHERE d.po_number LIKE N'KAMPO-B%'
+  AND CONVERT(int, SUBSTRING(d.po_number, 8, 20)) % $(CommentEvery) = 0;
+PRINT '  detail comments: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- Inbound shipments. carrier_id and date_expected are NOT NULL with no default.
+-- Half are left open on purpose - see the block comment above.
+;WITH n AS
+(
+    SELECT TOP ($(PoDocs)) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
+    FROM sys.all_objects a CROSS JOIN sys.all_objects b
+)
+INSERT dbo.t_rcpt_ship (wh_id, shipment_number, carrier_id, date_expected, date_received,
+                        status, workers_assigned)
+SELECT N'K01', N'KAMSH-B' + CONVERT(nvarchar(12), n.i), 1,
+       DATEADD(DAY, n.i % 730, CONVERT(datetime, '2024-01-01')),
+       CASE WHEN n.i % 2 = 0 THEN DATEADD(DAY, (n.i % 730) + 1, CONVERT(datetime, '2024-01-01')) ELSE NULL END,
+       CASE WHEN n.i % 2 = 0 THEN N'C' ELSE N'O' END,
+       0
+FROM n
+WHERE n.i % $(CommentEvery) = 0;
+PRINT '  shipments: ' + CAST(@@ROWCOUNT AS varchar(20));
+GO
+
+-- One link per shipment, to the PO with the same ordinal. Both parents therefore
+-- exist, which is what makes the junction meaningful.
+INSERT dbo.t_rcpt_ship_po (wh_id, shipment_number, po_number)
+SELECT rs.wh_id, rs.shipment_number, N'KAMPO-B' + SUBSTRING(rs.shipment_number, 8, 20)
+FROM dbo.t_rcpt_ship rs
+WHERE rs.shipment_number LIKE N'KAMSH-B%'
+  AND EXISTS (SELECT 1 FROM dbo.t_po_master m
+              WHERE m.po_number = N'KAMPO-B' + SUBSTRING(rs.shipment_number, 8, 20)
+                AND m.wh_id = rs.wh_id);
+PRINT '  shipment links: ' + CAST(@@ROWCOUNT AS varchar(20));
 GO
 
 USE [$(AdvDb)];
@@ -626,7 +808,39 @@ UNION ALL
 SELECT 'ELIGIBLE', 'AAD_WORKQ_ARCH', COUNT_BIG(*), COUNT_BIG(*)
 FROM dbo.t_work_q q
 WHERE q.work_q_id LIKE N'KAMTQ%' AND q.datetime_stamp IS NOT NULL AND q.work_status IN (N'C', N'P')
-  AND CAST(TRY_CONVERT(datetime2, q.datetime_stamp) AT TIME ZONE @Tz AT TIME ZONE N'UTC' AS datetime2(0)) < @Cut;
+  AND CAST(TRY_CONVERT(datetime2, q.datetime_stamp) AT TIME ZONE @Tz AT TIME ZONE N'UTC' AS datetime2(0)) < @Cut
+UNION ALL
+SELECT 'ELIGIBLE', 'AAD_PO_ARCH', COUNT_BIG(*), COUNT_BIG(*) * 3
+FROM dbo.t_po_master m
+WHERE m.po_number LIKE N'KAMPO-B%' AND m.status = N'C' AND m.closed_date IS NOT NULL
+  AND CAST(CAST(m.closed_date AS datetime2) AT TIME ZONE @Tz AT TIME ZONE N'UTC' AS datetime2(0)) < @Cut;
+GO
+
+/* ---------------------------------------------------------------------------
+   HOW MANY ROWS MUST SURVIVE. This is the other half of the specification: the
+   verification in 33_verify_bulk.sql compares against these numbers, so they are
+   printed here where the data was created rather than recomputed from scratch.
+   --------------------------------------------------------------------------- */
+DECLARE @Cut3 datetime2(0) = DATEADD(MINUTE, -1440, DATEADD(DAY, -90, CONVERT(datetime2(0), SYSUTCDATETIME())));
+DECLARE @Tz3 nvarchar(200) = N'Central European Standard Time';
+
+SELECT Section = 'MUST_SURVIVE', ProcessCode = 'AAD_ORDER_ARCH', Reason = 'status not in (S,D)',
+       Headers = COUNT_BIG(*)
+FROM dbo.t_order WHERE order_number LIKE N'KAMT-OF%' AND status NOT IN (N'S', N'D')
+UNION ALL
+SELECT 'MUST_SURVIVE', 'AAD_PICKDETAIL_ARCH', 'status <> SHIPPED', COUNT_BIG(*)
+FROM dbo.t_pick_detail WHERE lot_number = N'KAMTEST' AND status <> N'SHIPPED'
+UNION ALL
+SELECT 'MUST_SURVIVE', 'AAD_TRANLOG_ARCH', 'dated inside the retention window', COUNT_BIG(*)
+FROM dbo.t_tran_log
+WHERE generic_text1 = N'KAMTEST'
+  AND CAST(TRY_CONVERT(datetime2, start_tran_date) AT TIME ZONE @Tz3 AT TIME ZONE N'UTC' AS datetime2(0)) >= @Cut3
+UNION ALL
+SELECT 'MUST_SURVIVE', 'AAD_WORKQ_ARCH', 'work_status not in (C,P)', COUNT_BIG(*)
+FROM dbo.t_work_q WHERE work_q_id LIKE N'KAMTQ%' AND work_status NOT IN (N'C', N'P')
+UNION ALL
+SELECT 'MUST_SURVIVE', 'AAD_PO_ARCH', 'status <> C (still open)', COUNT_BIG(*)
+FROM dbo.t_po_master WHERE po_number LIKE N'KAMPO-B%' AND status <> N'C';
 GO
 
 USE [$(AdvDb)];

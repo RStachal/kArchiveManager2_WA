@@ -7,6 +7,10 @@ Built and verified end-to-end on **SQL Server 2022, collation `Czech_CS_AS`**,
 against `AAD` (394 tables) and `ADV` (47 tables). Every script here has been
 executed on that instance; the notes below record what actually happened.
 
+**Deploying at a customer site: follow [DEPLOYMENT.md](DEPLOYMENT.md).** It is the
+runbook — eight phases with a stop condition on each. This file explains *why* the
+configuration looks the way it does.
+
 ---
 
 ## The one rule that shapes everything
@@ -335,6 +339,61 @@ A run that deletes everything old is not a pass — the gates have to hold.
 
 ---
 
+## Correctness at volume — were ONLY the configured rows processed?
+
+The functional test (66 rows, 15 gated cases) proves the gates work. It does not
+prove they still work when there are hundreds of thousands of rows, and it cannot
+prove that a predicate does not match *too much* — with a handful of documents,
+an over-matching predicate and a correct one look the same.
+
+So `40_perf_seed.sql` seeds every table of every set to **10 000–100 000 rows**
+and makes **20 % of each set deliberately gated**, using the exact attribute that
+set's gate tests:
+
+| Set | Eligible | Gated, and why it must survive |
+|---|---|---|
+| `AAD_TRANLOG_ARCH` | `start_tran_date` past the cutoff | dated **inside** the retention window |
+| `AAD_PICKDETAIL_ARCH` | status `SHIPPED`, old | status `PICKED` — not terminal |
+| `AAD_WORKQ_ARCH` | `work_status` `C`, old | `work_status` `R` — outside `(C,P)` |
+| `AAD_ORDER_ARCH` | status `S`, shipped long ago | status `U` — not terminal |
+| `AAD_PO_ARCH` | status `C`, closed long ago | status `O` — still open, `closed_date` NULL |
+
+21 of 22 tables landed in the band; `t_pack` holds 7 rows because its primary key
+is `(id, wh_id)` and `id` is a foreign key to `t_employee` — seven employees on
+K01, so seven rows, whatever the order volume.
+
+### Result: three real runs over ~534 000 seeded rows
+
+| Check | Result |
+|---|---|
+| Rows archived vs deleted | **593 836 = 593 836, divergence 0** |
+| Gate violations in the archive (12 checks) | **all 0** |
+| Orphan checks (9 relationships) | **all 0** |
+| Reconciliation `source + archive` vs seeded | **equal for every table** |
+| `v_OperationalHealth` | no non-OK rows |
+
+The gate check is asked of the **archive**, not the source, and that is the point:
+a source count cannot distinguish "correctly kept" from "wrongly never selected".
+Asking whether the archive contains a row that should have been held gives a
+yes/no answer with no interpretation. All twelve came back 0 —
+
+- no order outside status `(S,D)`, and none inside the retention window;
+- no pick outside `SHIPPED`, and none inside the window;
+- no `t_tran_log` row inside the window;
+- no work queue outside `(C,P)`, and none inside the window;
+- no PO outside status `C`, and none with a NULL or too-recent `closed_date`;
+- no `t_pick_container` whose order is still in the source, and no
+  `t_pick_task_uom` whose pick is still in the source — the two children added by
+  `26` do not over-match;
+- and **no archive table at all for `t_rcpt_ship`**, which is in no set.
+
+`ORDER` and `PO` each needed exactly two runs, as predicted from
+`BatchDocCount 50 × MaxBatchesPerRun 200 = 10 000 documents per run` against
+20 000 eligible documents. That is a cap doing its job, not a failure —
+`33_verify_bulk.sql` section B distinguishes the two.
+
+---
+
 ## Throughput on WA01 — how much moves in one minute
 
 `40_perf_seed.sql` then `41_perf_test.sql`. Mode 1 throughout, so **every row is
@@ -352,38 +411,59 @@ the same instance with the same data varies by up to a factor of two on this box
 so a point value would be false precision. Median is given because with n = 3 it
 is more representative than a mean.
 
-### Per table — rows moved in one minute
+### Per set — the run that covered all six
 
-| Set | Table | Rows in 1 min (min – max) | Rows/s median | Rows/s range |
-|---|---|---|---|---|
-| `AAD_WORKQ_ARCH` | `t_work_q` | 292 000 – 376 000 | **5 667** | 4 949 – 6 267 |
-| | `t_work_q_assignment` | 29 591 – 38 359 | 570 | 502 – 639 |
-| | `t_work_q_dependency` | 29 591 – 38 359 | 570 | 502 – 639 |
-| `AAD_TRANLOG_ARCH` | `t_tran_log` | 102 000 – 196 000 | **3 400** | 2 372 – 4 667 |
-| | `t_tran_log_sn` | 9 864 – 18 906 | 329 | 229 – 450 |
-| | `t_tran_log_reason` | 9 864 – 18 906 | 329 | 229 – 450 |
-| `AAD_PICKDETAIL_ARCH` | `t_pick_detail` | 102 000 – 192 000 | **4 278** | 2 372 – 4 364 |
-| | `t_allocation` | 9 864 – 18 906 | 430 | 229 – 434 |
-| `ADV_LOGMSG_ARCH` | `t_log_message` | 84 000 – 85 520 | **2 940** | 1 500 – 2 949 |
-| `AAD_ORDER_ARCH` | `t_order_detail` | 14 600 – 17 400 | 264 | 256 – 300 |
-| | `t_order` | 7 300 – 8 700 | 132 | 128 – 150 |
-| | `t_order_comment` | 7 300 – 8 700 | 132 | 128 – 150 |
-| | `t_order_detail_comment` | 746 – 912 | 14 | 13 – 16 |
-| | `t_pack` | 2 – 3 | — | — |
+| Set | Strategy | Documents | Rows in 1 min | Elapsed | Rows/s | Prepare |
+|---|---|---|---|---|---|---|
+| `AAD_WORKQ_ARCH` | TIMESTAMP | 244 000 | **342 638** | 60 s | **5 711** | — |
+| `AAD_TRANLOG_ARCH` | ANCHOR | 106 000 | **147 100** | 37 s | **3 976** | 15 s |
+| `AAD_PICKDETAIL_ARCH` | ANCHOR | 58 000 | **127 508** | 35 s | **3 643** | 17 s |
+| `ADV_LOGMSG_ARCH` | ANCHOR | 83 577 | **83 577** | 55 s | **1 520** | 2 s |
+| `AAD_PO_ARCH` | ANCHOR | 10 700 | **53 652** | 57 s | **941** | 1 s |
+| `AAD_ORDER_ARCH` | ANCHOR | 6 650 | **36 582** | 57 s | **642** | 2 s |
+| | | | **791 057** | | | |
 
-### Per set
+**Five of the six were stopped by the clock**, with 49 300 – 556 000 rows still
+eligible per set, so those are rates and not volumes. `ADV_LOGMSG_ARCH` drained
+its whole allowed population in 55 s — structural, not a seeding mistake: ADV caps
+`t_log_message` at 100 000 rows, so its entire archivable population is smaller
+than one minute of throughput.
 
-| Set | Strategy | Rows moved in 1 min | Rows/s median | Rows/s range | Prepare |
-|---|---|---|---|---|---|
-| `AAD_WORKQ_ARCH` | TIMESTAMP | 351 182 – 452 718 | **6 807** | 5 952 – 7 545 | — |
-| `AAD_PICKDETAIL_ARCH` | ANCHOR | 111 864 – 210 906 | **4 712** | 2 601 – 4 793 | 11–16 s |
-| `AAD_TRANLOG_ARCH` | ANCHOR | 121 728 – 233 812 | **4 058** | 2 831 – 5 567 | 11–12 s |
-| `ADV_LOGMSG_ARCH` | ANCHOR | 84 000 – 85 520 | **2 940** | 1 500 – 2 949 | 2 s |
-| `AAD_ORDER_ARCH` | ANCHOR | 29 948 – 35 715 | **542** | 525 – 616 | 1–2 s |
+### Per table
 
-`Divergence` (archived − deleted) was **0** on every row of every table in all
-three runs, and `C_ORPHAN_CHECK` was 0/0/0 afterwards. Each run archived and
-deleted roughly **0.8–1.0 million rows** across its five one-minute windows.
+| Set | Table | Rows in 1 min | Rows/s |
+|---|---|---|---|
+| `AAD_WORKQ_ARCH` | `t_work_q` | 244 000 | **4 067** |
+| | `t_work_q_assignment` | 49 319 | 822 |
+| | `t_work_q_dependency` | 49 319 | 822 |
+| `AAD_TRANLOG_ARCH` | `t_tran_log` | 106 000 | **2 865** |
+| | `t_tran_log_reason` | 20 550 | 555 |
+| | `t_tran_log_sn` | 20 550 | 555 |
+| `AAD_PICKDETAIL_ARCH` | `t_pick_detail` | 58 000 | **1 657** |
+| | `t_pick_task_uom` | 58 000 | **1 657** |
+| | `t_allocation` | 11 508 | 329 |
+| `ADV_LOGMSG_ARCH` | `t_log_message` | 83 577 | **1 520** |
+| `AAD_PO_ARCH` | `t_po_detail` | 21 400 | 375 |
+| | `t_po_detail_comment` | 10 776 | 189 |
+| | `t_po_master` | 10 700 | 188 |
+| | `t_po_comment` | 5 388 | 95 |
+| | `t_rcpt_ship_po` | 5 388 | 95 |
+| `AAD_ORDER_ARCH` | `t_order_detail` | 13 300 | 233 |
+| | `t_order` | 6 650 | 117 |
+| | `t_order_comment` | 6 650 | 117 |
+| | `t_pick_container` | 6 650 | 117 |
+| | `t_order_detail_comment` | 3 330 | 58 |
+| | `t_pack` | 2 | — |
+
+`Divergence` (archived − deleted) was **0** on every table, `COVERAGE` reported all
+six sets measured, and `PURGE_INTERFERENCE` was empty so the ADV figure is clean.
+
+### Earlier runs, for the variance
+
+Three earlier runs of the five original sets gave `t_pick_detail`
+2 372 / 4 364 / 4 278 rows/s and `t_log_message` 2 949 / 2 940 / 1 500 — **up to a
+factor of two apart**, with a different set as the outlier each time. Treat any
+single figure above as an order of magnitude.
 
 ### Why the runs disagree — and what that tells you
 
@@ -496,6 +576,7 @@ Size the first production run from a measurement, not from this README.
 | `27_seed_po_set.sql` | **yes** (config) | Sixth set: purchase orders (`AAD_PO_ARCH`). Section D measures the shipment-link exposure that cannot be gated in configuration |
 | `31_test_data_po.sql` | **yes** (test rows) | Six purchase orders: three archived, three held for three different reasons, plus the open-shipment case |
 | `32_test_data_children.sql` | **yes** (test rows) | Self-contained cases for the two added children, including a container with `order_number` NULL that must survive |
+| `33_verify_bulk.sql` | no | The volume test's verdict: reconciliation, completeness, **12 gate checks against the archive**, 9 orphan checks, divergence and health. Section C is the "only the configured rows" test |
 | `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
 | `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
 | `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |

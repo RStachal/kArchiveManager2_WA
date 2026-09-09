@@ -364,6 +364,11 @@ FROM ' + @W + N't_work_q q
 WHERE q.work_q_id LIKE N''KAMTQ%'' AND q.datetime_stamp IS NOT NULL AND q.work_status IN (N''C'', N''P'')
   AND CAST(TRY_CONVERT(datetime2, q.datetime_stamp) AT TIME ZONE @Tz AT TIME ZONE N''UTC'' AS datetime2(0)) < @Cut
 UNION ALL
+SELECT ''AAD_PO_ARCH'', COUNT_BIG(*)
+FROM ' + @W + N't_po_master m2
+WHERE m2.po_number LIKE N''KAMPO-B%'' AND m2.status = N''C'' AND m2.closed_date IS NOT NULL
+  AND CAST(CAST(m2.closed_date AS datetime2) AT TIME ZONE @Tz AT TIME ZONE N''UTC'' AS datetime2(0)) < @Cut
+UNION ALL
 SELECT ''ADV_LOGMSG_ARCH'', COUNT_BIG(*)
 FROM ' + @A + N't_log_message m
 WHERE m.machine_id = N''KAMTEST''
