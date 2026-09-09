@@ -1,7 +1,7 @@
 # kArchiveManager 2.0 — deployment package for Koerber Warehouse Advantage
 
 Deploys, configures and tests kArchiveManager 2.0 against a Koerber WA / K.Motion
-schema, as **five document sets** with a header → detail hierarchy.
+schema, as **six document sets** with a header → detail hierarchy.
 
 Built and verified end-to-end on **SQL Server 2022, collation `Czech_CS_AS`**,
 against `AAD` (394 tables) and `ADV` (47 tables). Every script here has been
@@ -39,19 +39,24 @@ footprint is built into it (`B_OUR_FOOTPRINT` must read 0/0).
 
 ---
 
-## The five document sets
+## The six document sets
 
 Each set has ONE header table and its details. Details are deleted first, the
 header last. **No table appears in two sets** — enforced by the `OVERLAP_CHECK`
-in `25_seed_document_sets.sql`.
+in `25_seed_document_sets.sql`, and repeated in `26` and `27`.
 
 | RunOrder | Process | Strategy | Header (deleted last) | Details (bottom-up) |
 |---|---|---|---|---|
-| 10 | `AAD_PICKDETAIL_ARCH` | ANCHOR | `t_pick_detail` | `t_allocation` |
+| 10 | `AAD_PICKDETAIL_ARCH` | ANCHOR | `t_pick_detail` | `t_allocation`, `t_pick_task_uom` |
 | 20 | `AAD_TRANLOG_ARCH` | ANCHOR | `t_tran_log` | `t_tran_log_reason`, `t_tran_log_sn` |
-| 30 | `AAD_ORDER_ARCH` | ANCHOR | `t_order` | `t_order_detail_comment` → `t_order_comment` → `t_order_detail` → `t_pack` |
+| 30 | `AAD_ORDER_ARCH` | ANCHOR | `t_order` | `t_order_detail_comment` → `t_order_comment` → `t_order_detail` → `t_pack` → `t_pick_container` |
 | 40 | `AAD_WORKQ_ARCH` | TIMESTAMP | `t_work_q` | `assignment`, `dependency` (both sides) |
 | 50 | `ADV_LOGMSG_ARCH` | ANCHOR | `t_log_message` | — |
+| 60 | `AAD_PO_ARCH` | ANCHOR | `t_po_master` | `t_po_detail_comment` → `t_po_comment` → `t_po_detail` → `t_rcpt_ship_po` |
+
+`t_pick_task_uom` and `t_pick_container` were added by `26` after the data-model
+analysis; `AAD_PO_ARCH` is the inbound set added by `27`. See *The inbound side*
+below for why purchase orders needed a set of their own.
 
 ### Why `t_pick_detail` and `t_tran_log` are not details of the order
 
@@ -122,8 +127,94 @@ house rule. `24_seed_logmessage_anchor.sql` supersedes it.
 |---|---|
 | `t_employee` | Has `work_q_id`, but it is **master data** — a pointer to the operator's current task. Never archive. Consequence: a queue referenced by a live employee could still be archived; the `work_status IN ('C','P')` gate makes that unlikely. |
 | `t_track_tran_log_holding` | Links by `tran_log_holding_id`, not `tran_log_id`, so the keyset cannot reach it. Carries **shipping addresses (personal data)**, so it needs a retention rule — just not this one. Raise separately. |
-| `t_label`, `t_pick_container` | No `pick_id`; reachable only via `t_allocation.allocation_id`. Out of scope rather than guessed. |
-| `t_tran_log_holding` | Transient staging heap that `usp_process_tran_log` drains continuously — archiving would race the WMS. |
+| `t_label` | No `pick_id`; reachable only via `t_allocation.allocation_id`. Out of scope rather than guessed. |
+| `t_tran_log_holding`, `_reason`, `_sn` | Pre-commit staging that `usp_process_tran_log` drains **to empty**: it takes `MAX(tran_log_holding_id)` as a high-water mark, copies the rows into `t_tran_log`, deletes everything `<=` that mark with no filter at all, then loops until the table is empty. Its rows are transactions **in flight**. Accumulation there means the drain is broken — and those are exactly the rows that must not be deleted. |
+| `t_sto_attrib_collection_master`, `_detail` | Looks like a child of `t_pick_detail` and `t_order_detail` (both carry `stored_attribute_id`), but it has a **`detail_checksum`** column and is referenced by **nine** tables including `t_stored_item` (live inventory) and `t_bom_detail`. It is a content-deduplicated shared pool. Deleting a collection because one pick aged out would break every other row sharing that checksum. |
+| Cartonisation / optimiser: `t_cartonize_results`, `t_container_optimize_block` / `_status` / `_xml` | The application purges them itself by `cartonization_batch_id` — `usp_cartonize_q` runs our exact candidate predicate, and `usp_afa_hold_shipment` / `usp_afo_hold_wave` delete all three optimiser tables. Their `order_number` and `hu_id` are also **nullable**, so an order-anchored predicate would only ever half-clear them while looking complete. |
+| `t_item_uom`, `t_pick_put_master` / `_detail`, `t_item_master` | Master and configuration data. `t_item_uom` alone is referenced by 88 modules. Note that `pick_put_id` is a pick/put **profile** — a different concept from `pick_id`. |
+| `ADV.t_log_message_action` | Name suggests a child of `t_log_message`; it is a log-*level* configuration table (`application_id`, `action_type`, `log_level_override`) with no relationship to it at all. |
+
+**`t_pick_container` was in this list and is no longer.** It was excluded as
+"reachable only via `t_allocation.allocation_id`", which was wrong: it carries
+`order_number` + `wh_id` directly and belongs to the ORDER set. `26` adds it.
+
+---
+
+## The inbound side, and why it needed its own set
+
+The five original sets cover **outbound** (orders, picks) and the logs. Inbound had
+no retention at all, and the WMS does not clean it up:
+`usp_util_close_inbound_order` sets `t_po_master.status = 'C'` and
+`closed_date = CONVERT(DATE, GETDATE())` — and contains **no `DELETE` at all**. The
+only code that removes real PO rows is `usp_al_import_inbound_order`, and only when
+the host sends `processing_code = 'Delete'`. `AAD` has **no SQL Agent housekeeping
+job whatsoever** — the only purge job on the instance is ADV's own `Log Maintenance`.
+So a closed purchase order stays for the life of the database.
+
+`AAD_PO_ARCH` is therefore the direct mirror of the ORDER set: `pk_po_master` is
+`(po_number, wh_id)`, so the composite natural key is unique by definition, and the
+children hold `NO_ACTION` FKs to the header, which forces ANCHOR for the same
+reason as `t_tran_log`.
+
+**The cutoff is `closed_date` alone, with no fallback.** The ORDER set needs
+`COALESCE(NULLIF(actual_ship_date,'19000101'), order_date)` because `t_order`
+defaults its nullable datetimes to the 1900 sentinel. `t_po_master.closed_date` has
+no default, is NULL until closing, and is written by the same statement that sets
+`status = 'C'`. Adding a `create_date` fallback would archive **open** purchase
+orders. Don't.
+
+### `t_rcpt_ship_po` is a junction between two documents — read before enabling
+
+It links a PO to an inbound shipment (`t_rcpt_ship`), with a `NO_ACTION` FK to
+`t_po_master` and a `CASCADE` FK from `t_rcpt_ship`. Three consequences:
+
+- It **must** be in the set. Leaving it out makes the header delete fail with
+  `Msg 547` for every PO ever received against a shipment.
+- Archiving a PO therefore removes that shipment's link to it. That is inherent to
+  archiving the PO at all — keeping the junction while deleting the PO would leave
+  it pointing at nothing, and the FK forbids it regardless.
+- The rows are preserved **in the archive** next to the PO, so the fact stays
+  recoverable; only the live shipment view loses it.
+
+The ideal gate — *only archive a PO whose linked shipments are also closed* —
+**cannot be expressed in configuration**. `arch.usp_AssertSafeSqlExpression` refuses
+any subquery (probed directly: `NOT EXISTS` → `THROW 50400`, while a plain
+status/date predicate, an `AT TIME ZONE` cutoff and a `CASE` expression are all
+accepted), and `t_po_master` carries no "received" flag to test instead. Section D
+of `27_seed_po_set.sql` therefore **measures** the exposure — how many eligible POs
+link to a shipment that is still open — so it is a decision taken with a number
+rather than a surprise. `31_test_data_po.sql` includes `KAMPO-6` for exactly this
+case: it *is* archived despite its open shipment, and if section D reports 0 while
+that row exists, section D is broken.
+
+### Test result for the inbound set
+
+| PO | Expected | Outcome |
+|---|---|---|
+| `KAMPO-1` | ARCHIVE, full depth | 7 rows |
+| `KAMPO-2` | ARCHIVE, minimal | 2 rows |
+| `KAMPO-6` | ARCHIVE despite open shipment | 3 rows |
+| `KAMPO-3` | KEEP — status `O` | survived |
+| `KAMPO-4` | KEEP — closed 10 days ago | survived |
+| `KAMPO-5` | KEEP — `closed_date` NULL | survived |
+
+3 documents, **12 archived = 12 deleted, divergence 0**, per table
+`t_po_master` 3 / `t_po_detail` 4 / `t_po_comment` 1 / `t_po_detail_comment` 2 /
+`t_rcpt_ship_po` 2. Both shipments still present — `t_rcpt_ship` is in no set and
+was not touched. Orphan check 0/0/0. `KAMPO-6`'s link row is in the archive.
+
+The `t_po_detail_comment` count is the delete-order proof: it cascades from
+`t_po_detail`, so if the archiver deleted the detail before copying the comments,
+the cascade would destroy rows that were never archived and archived would fall
+below deleted.
+
+### Test result for the two added children
+
+`t_pick_container` 1 archived = 1 deleted; `t_pick_task_uom` 1 archived = 1 deleted;
+divergence 0. The container on a **held** order survived, and so did the container
+with `order_number` NULL — that one can never match the predicate and is left in
+place by design. It is the accepted limitation of that object: the table is not
+fully drained by this set, but nothing unattributable is ever deleted.
 
 ---
 
@@ -401,6 +492,10 @@ Size the first production run from a measurement, not from this README.
 | `12_verify.sql` | no | Baseline reconciliation for the order/work-queue pair |
 | `13_restore.sql` | opt-in | Restore from archive |
 | `19_add_logmessage_key.sql` | — | **DO NOT USE** — breaks the house rule; see `24` |
+| `26_add_pick_order_children.sql` | **yes** (config) | Adds `t_pick_container` to the ORDER set and `t_pick_task_uom` to the PICKDETAIL set. Also records why the other 51 candidates were rejected |
+| `27_seed_po_set.sql` | **yes** (config) | Sixth set: purchase orders (`AAD_PO_ARCH`). Section D measures the shipment-link exposure that cannot be gated in configuration |
+| `31_test_data_po.sql` | **yes** (test rows) | Six purchase orders: three archived, three held for three different reasons, plus the open-shipment case |
+| `32_test_data_children.sql` | **yes** (test rows) | Self-contained cases for the two added children, including a container with `order_number` NULL that must survive |
 | `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
 | `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
 | `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |
@@ -550,6 +645,38 @@ source catalogue.
 **`OUTPUT` cannot contain a subquery** (`Msg 10705`) and cannot reference a joined
 table — only the target row and `inserted`/`deleted`. Capture the bare facts and
 join afterwards.
+
+**`usp_Api_SaveProcessDatabase` has no `@ProcessDatabaseId`.** Every other `Save`
+API in the `arch` schema takes an id as an `OUTPUT` parameter; this one identifies
+the row by `(ProcessCode, SourceDb, ArchiveDb)` instead. Passing the id fails with
+`@ProcessDatabaseId is not a parameter for procedure usp_Api_SaveProcessDatabase`.
+
+**The index-requirement check tests presence, not seekability.**
+`arch.usp_ValidateIndexRequirements` warns only when *no* enabled index contains
+the required columns **as key columns** — it does not care whether they *lead*. So
+`t_pick_task_uom`'s requirement on `pick_id` validates clean even though the only
+index is `ui_pick_task_uom (wh_id, cartonization_batch_id, planned_actual,
+line_number, pick_id)`, where `pick_id` is the fifth key column and the delete join
+scans the heap. Judge seek quality from the index definition; a green validation is
+not evidence of one. The requirement's `Notes` field is where the truth is recorded.
+
+**A grep over `sys.sql_modules` is not evidence — read the procedure.** The pattern
+`'%DELETE%' + table + '%'` matches whenever *any* `DELETE` appears anywhere before
+the table name in a module body, and it produced two wrong conclusions in one
+analysis: `usp_shp_tx` looked like it purged `t_pick_container` (it only
+`LEFT OUTER JOIN`s it at lines 282 and 463; its four `DELETE`s hit serial numbers,
+`t_stored_item`, `t_hu_master` and `t_work_q_assignment`), and `usp_por_create_inv`
+/ `usp_shr_create_inv` looked like receiving deletes purchase orders (every `DELETE`
+in them targets `#tmp_po_detail` and `#tmp_serial_number_scanned` — temp tables).
+Also escape the underscore: in `LIKE`, `_` matches any single character, so
+`'%t_returns%'` matches more than `t_returns`. Use `ESCAPE`.
+
+**Never round-trip a UTF-8 file through PowerShell 5.1's `Get-Content`/`Set-Content`.**
+`Get-Content -Raw` decodes as the ANSI code page unless told otherwise, so `—`
+becomes `â€"`; writing that back with `-Encoding utf8` stores the mojibake *and*
+adds a BOM. It turned a one-line heading edit into a 120-line diff of this README.
+Use an editor that preserves encoding, or `[System.IO.File]::ReadAllText($p,
+[System.Text.Encoding]::UTF8)`.
 
 **`sys.columns` is not cross-database.** `OBJECT_ID('OtherDb.dbo.t')` resolves a
 three-part name, but `sys.columns` only holds the current database's objects — so
