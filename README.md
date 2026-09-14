@@ -11,6 +11,10 @@ executed on that instance; the notes below record what actually happened.
 runbook — eight phases with a stop condition on each. This file explains *why* the
 configuration looks the way it does.
 
+**The Admin Console** (the web UI, an IIS application) ships in the customer
+handover package, not here. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records three
+corrections its own documentation needs, and what is still missing on this server.
+
 ---
 
 ## The one rule that shapes everything
