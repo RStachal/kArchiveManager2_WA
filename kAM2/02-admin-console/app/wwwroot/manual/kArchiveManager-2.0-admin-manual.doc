@@ -1,0 +1,987 @@
+﻿<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name=ProgId content=Word.Document>
+<meta name=Generator content="kArchiveManager">
+<title>kArchiveManager 2.0 - Admin manual</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>
+@page { size: A4; margin: 2cm; }
+body { font-family: 'Calibri','Segoe UI',sans-serif; font-size: 11pt; line-height: 1.4; color: #1a1a1a; }
+h1 { font-family: 'Calibri Light','Segoe UI',sans-serif; color: #1f3864; font-size: 22pt; border-bottom: 2px solid #1f3864; padding-bottom: 4px; }
+h2 { font-family: 'Calibri Light','Segoe UI',sans-serif; color: #1f3864; font-size: 16pt; margin-top: 18pt; }
+h3 { color: #2e5496; font-size: 13pt; }
+h4 { color: #2e5496; font-size: 11pt; }
+code { font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; background: #f2f2f2; padding: 0 3px; }
+pre { font-family: 'Consolas','Courier New',monospace; font-size: 9pt; background: #f6f8fa; border: 1px solid #ddd; padding: 8px; white-space: pre-wrap; word-wrap: break-word; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 8px 0; }
+th, td { border: 1px solid #9aa; padding: 4px 8px; font-size: 10pt; vertical-align: top; }
+th { background: #dae3f3; text-align: left; }
+blockquote { border-left: 3px solid #c0c0c0; margin: 8px 0; padding: 2px 12px; color: #444; background: #fafafa; }
+a { color: #1155cc; }
+</style>
+</head>
+<body>
+<h1>kArchiveManager 2.0 &ndash; Kompletní příručka pro administrátory</h1>
+
+<h2>Obsah</h2>
+<ul>
+  <li><a href="#1-architektura-a-principy">1. Architektura a principy</a></li>
+  <li><a href="#2-konfiguracni-model">2. Konfigurační model (Defaults vs Overrides)</a></li>
+  <li><a href="#3-editace-konfigurace">3. Editace konfigurace</a></li>
+  <li><a href="#4-cutoff-a-casove-pasy">4. Cutoff a časové pásmy</a></li>
+  <li><a href="#5-audit-a-protokolovani">5. Audit a protokolování</a></li>
+  <li><a href="#6-bezpecnost-a-pristup">6. Bezpečnost a přístup (role L1 / L2)</a></li>
+  <li><a href="#7-sql-agent-jobs">7. SQL Agent jobs</a></li>
+  <li><a href="#8-vykon-a-optimalizace">8. Výkon a optimalizace</a></li>
+  <li><a href="#9-operacni-funkce">9. Operační funkce</a>
+    <ul>
+      <li><a href="#9-1-restore">9.1 Restore z archivu</a></li>
+      <li><a href="#9-2-recovery">9.2 Recovery uvízlých běhů</a></li>
+      <li><a href="#9-3-zalohy">9.3 Zálohy archivu</a></li>
+      <li><a href="#9-4-validace">9.4 Validace konfigurace</a></li>
+      <li><a href="#9-5-odhady">9.5 Odhady dopadu</a></li>
+      <li><a href="#9-6-golive">9.6 Go-live kontrolní seznam</a></li>
+    </ul>
+  </li>
+  <li><a href="#10-operacni-zaruka">10. Operační záruka bezpečnosti</a></li>
+  <li><a href="#dodatek">Dodatek &ndash; Klíčové tabulky a views</a></li>
+</ul>
+
+<hr>
+
+<h2 id="1-architektura-a-principy">1. Architektura a principy</h2>
+
+<h3>1.1 Tři klíčové databáze</h3>
+<p>kArchiveManager pracuje se třemi databázovými vrstvami:</p>
+<ul>
+  <li><strong>kArchiveManagerAdmin</strong> &ndash; řídící databáze, obsahuje konfiguraci, stav běhů, audit a monitoring. Neobsahuje archivovaná data.</li>
+  <li><strong>kArchiveManagerBackups</strong> &ndash; archivní databáze, uchovává kopie smazaných řádků oddělené do schémat podle zdrojové databáze (např. <code>Edge</code>, <code>KMWEBV</code>). Doporučen režim FULL recovery.</li>
+  <li><strong>Zdrojové databáze</strong> &ndash; provozní systémy (zákaznické), ze kterých se data archivují a mažou. Aplikace je nikdy schématicky nemodifikuje &ndash; žádné indexy, žádné DDL změny.</li>
+</ul>
+
+<h3>1.2 Tři fáze jednoho běhu (životní cyklus)</h3>
+<p>Každý proces probíhá v těchto třech explicitních fázích:</p>
+<ol>
+  <li><strong>SELECT (příprava)</strong> &ndash; vybere kandidáty (řádky k archivaci) do resumovatelného keysetu podle strategie procesu (ANCHOR, TIMESTAMP, apod.).</li>
+  <li><strong>ARCHIVE (archivace)</strong> &ndash; vloží vybrané řádky do archivní databáze (pouze pokud Mode=1 nebo Mode=2).</li>
+  <li><strong>DELETE (smazání)</strong> &ndash; smaže zdrojové řádky JOINem na materializovaný keyset, po dávkách (pouze pokud Mode=1 nebo Mode=0).</li>
+</ol>
+<p>Tímto přístupem se zajišťuje, že runner <strong>nikdy opakovaně neskenuje velké zdrojové tabulky</strong> s generickým <code>DELETE TOP</code> predikátem. Kandidáti se vyberou jednou, zapíší do keysetu a následné archivování/mazání probíhá přes indexované joiny.</p>
+
+<h3>1.3 Řetězec spuštění (oficiální v2 cesta)</h3>
+<p>Všechny produkční běhy procházejí jednotným řetězcem:</p>
+<pre><code>arch.usp_RunProfile_Prepared
+  └─ arch.usp_RunConfiguredProcesses_Prepared
+       ├─ ANCHOR strategie:
+       │    arch.usp_PrepareCandidates
+       │      └─ arch.usp_RunPreparedBatches_InWindow
+       │           └─ arch.usp_RunPreparedBatch
+       └─ TIMESTAMP strategie:
+            arch.usp_RunTimestampProcess</code></pre>
+<p><strong>Pravidlo č. 1:</strong> Pro veškerý produkční provoz se používá <strong>výhradně</strong> <code>usp_RunProfile_Prepared</code>. V1.0 procedury neexistují v čistém zákaznickém buildu.</p>
+
+<h3>1.4 Tři režimy zpracování (Mode)</h3>
+<ul>
+  <li><strong>Mode 1 (archivace + mazání)</strong> &ndash; smaže zdroj a archivuje jej; je invarianta <code>archived==deleted</code> a <code>Divergence=0</code>.</li>
+  <li><strong>Mode 0 (delete-only)</strong> &ndash; smaže zdroj bez archivace.</li>
+  <li><strong>Mode 2 (copy-only)</strong> &ndash; kopíruje do archivu bez mazání zdroje; idempotentní (re-run zkopíruje 0 nových řádků); vyžaduje PRIMARY KEY na zdrojové tabulce pro dedup.</li>
+</ul>
+
+<h3>1.5 Dvě nezávislé páky provozu</h3>
+<ul>
+  <li><strong>Run mode</strong> &ndash; <code>@DryRun = 1</code> (náhled, nic se nemění) vs. <code>@DryRun = 0</code> (reálné zpracování).</li>
+  <li><strong>AuditLevel</strong> &ndash; <code>NONE</code> / <code>BATCH</code> / <code>OBJECT</code> / <code>ROW</code> (kolik důkazů se zapíše).</li>
+</ul>
+<p>Tyto páky jsou nezávislé: dry-run obejde mazání, audit control řídí granularitu evidence.</p>
+
+<hr>
+
+<h2 id="2-konfiguracni-model">2. Konfigurační model (Defaults vs Overrides)</h2>
+
+<h3>2.1 Struktura &ndash; dvě úrovně</h3>
+<p>Konfigurace je organizována v dvoustupňové hierarchii:</p>
+<table>
+  <tr>
+    <th>Tabulka</th>
+    <th>Úroveň</th>
+    <th>Obsah</th>
+  </tr>
+  <tr>
+    <td><code>arch.Process</code></td>
+    <td>Šablona / Default</td>
+    <td>Výchozí nastavení procesu (společné pro všechny zdrojové databáze). Obsahuje <code>AuditLevel</code>, <code>BatchRowCount</code>, <code>CutoffMode</code>, <code>RetentionDays</code>, <code>CutoffDate</code>, <code>MaxRowsPerTransaction</code>, apod.</td>
+  </tr>
+  <tr>
+    <td><code>arch.ProcessDatabase</code></td>
+    <td>Override per-mapování</td>
+    <td>Mapování procesu × zdrojová DB × archivní DB. Každé pole zde může být <code>NULL</code> (použije se default z Process) nebo nastaveno na konkrétní hodnotu (override).</td>
+  </tr>
+  <tr>
+    <td><code>arch.ObjectSpec</code></td>
+    <td>Šablona objektu</td>
+    <td>Tabulky a sloupce, které proces zpracovává.</td>
+  </tr>
+  <tr>
+    <td><code>arch.ObjectSpecDatabaseOverride</code></td>
+    <td>Override objektu</td>
+    <td>Odchylky objektu v konkrétní zdrojové DB.</td>
+  </tr>
+</table>
+
+<h3>2.2 Precedence (COALESCE pravidlo)</h3>
+<p>Runtime nečte přímo tabulky výše &ndash; používá <strong>efektivní views</strong>, které slučují šablonu a override. Pro každou konfigurační hodnotu je aplikován vzorec:</p>
+<pre><code>COALESCE(ProcessDatabase.X, Process.X)</code></pre>
+<p><strong>Klíčová zásada:</strong> Má-li mapování (ProcessDatabase) nastavenou hodnotu &ndash; ta se použije. Jinak se berou výchozí hodnoty z Process.</p>
+<p>Efektivní views jsou:</p>
+<ul>
+  <li><code>arch.v_ProcessDatabaseEffective</code> &ndash; výsledná konfigurace procesu pro danou DB s informací o původu každé hodnoty (pole <code>*Source</code>).</li>
+  <li><code>arch.v_ObjectSpecDatabaseEffective</code> &ndash; výsledná objektová konfigurace.</li>
+</ul>
+
+<h3>2.3 Gotcha &ndash; maskování a viditelnost v konzoli</h3>
+<p>Editovat value v <strong>Process konfiguraci má ŽÁDNÝ runtime efekt</strong> pro mapování, které tuto hodnotu přepisuje. Příklad:</p>
+<ul>
+  <li>Nastavíte <code>Process.AuditLevel = NONE</code></li>
+  <li>Ale mapování RF_LOG2@KMWEBV má <code>ProcessDatabase.AuditLevel = ROW</code></li>
+  <li>Runtime používá ROW, ne NONE</li>
+</ul>
+<p><strong>Jak to konzola řeší:</strong></p>
+<ul>
+  <li><strong>Sloupec "Overrides"</strong> v Database mappings tabulce &ndash; seznam polí, která mapování přepisuje (např. "Mode, Audit, BatchRows"), nebo "&ndash;" když jsou plně zděděny.</li>
+  <li><strong>Source badges</strong> &ndash; amber ikona = field je přepsán v mapování; neutrální = zděděno z procesu.</li>
+  <li><strong>Advisory v editoru procesu</strong> &ndash; "Toto jsou výchozí hodnoty; mapování je může přepsat."</li>
+</ul>
+<p>Chcete-li změnit value, kterou mapování přepisuje, <strong>editujte mapování</strong> (Database mappings), ne samotný proces.</p>
+
+<hr>
+
+<h2 id="3-editace-konfigurace">3. Editace konfigurace</h2>
+
+<h3>3.1 Configuration view &ndash; procesy, mapování, objekty, profily</h3>
+<p>Admin Console nabízí čtyři hlavní oblasti pro editaci:</p>
+
+<h4>a) Procesy (Processes)</h4>
+<p>Tady definujete proces jako celek &ndash; jeho název, SelectionStrategy (ANCHOR, TIMESTAMP, apod.), výchozí AuditLevel, BatchRowCount, CutoffMode, RetentionDays, CutoffDate, MaxRowsPerTransaction, apod. Pamatujte, že toto jsou <strong>výchozí hodnoty</strong>; mapování je mohou přepsat.</p>
+
+<h4>b) Database mappings</h4>
+<p>Pro každý proces zde vidíte seznam mapování (proces × zdrojová DB × archivní DB). Každé mapování má:</p>
+<ul>
+  <li>Sloupec <strong>"Overrides"</strong> &ndash; která pole mapování přepisuje.</li>
+  <li>Editable pole (pokud jsou přepsána) &ndash; AuditLevel, BatchRowCount, Mode, CutoffMode, RetentionDays, apod.</li>
+  <li>Source badges (amber/neutrální) &ndash; visual hint na hierarchii.</li>
+</ul>
+
+<h4>c) Objekty (Objects)</h4>
+<p>Tabulky a sloupce, které proces zpracovává. Vidíte výběr sloupců pro archivaci/mazání.</p>
+
+<h4>d) Profily běhů (Run Profiles)</h4>
+<p>Deklarativní bundly &ndash; které procesy běžet a v jakém pořadí (grouping + filtering). Jedním click spustíte celý profil.</p>
+
+<h3>3.2 Validace a Explain plan</h3>
+<p>Každá konfigurace se validuje:</p>
+<ul>
+  <li><strong>Configuration &rarr; Validate</strong> &ndash; zkontroluje konzistenci všech nastavení (index requirements, foreign keys, cutoff logic, apod.). Vrací ERROR / WARN / INFO nálezy s doporučením opravy.</li>
+  <li><strong>Explain plan</strong> &ndash; vytiskne, co proces udělá: strategie, klíče, kandidáty, cutoff expression, audit level, apod. Před real run je doporučeno si explain plan projít.</li>
+</ul>
+
+<h3>3.3 Analysis &amp; Estimates view</h3>
+<p>Zobrazuje <strong>všechny procesy</strong> (bez jakýchkoli whitelist filtrů). Tabulky a grafy mají 460px max-height s vnitřním scrollem, aby dlouhé seznamy nenatulovaly stránku. Odhady jsou výchozně skryty &ndash; zobrazí se kliknutím na "Show estimates".</p>
+
+<hr>
+
+<h2 id="4-cutoff-a-casove-pasy">4. Cutoff a časové pásmy</h2>
+
+<h3>4.1 Dva režimy cutoff</h3>
+
+<h4>Režim 1: Relativní retence (doporučeno)</h4>
+<ul>
+  <li><code>CutoffMode = 0</code></li>
+  <li>Parametr: <code>RetentionDays</code> (kolik dní zpět si chcete ponechat).</li>
+  <li>Cutoff se počítá jako <code>NOW() - RetentionDays</code>.</li>
+  <li><strong>Výhoda:</strong> Žádná časozonová ambiguita. Cutoff se změní každý den automaticky.</li>
+  <li>Doporučeno pro rutinní provoz.</li>
+</ul>
+
+<h4>Režim 2: Fixní cutoff date (CutoffMode = 1)</h4>
+<ul>
+  <li>Parametr: <code>CutoffDate</code> (konkrétní datum).</li>
+  <li><strong>Interpretace:</strong> Datum je vždy <code>00:00:00 UTC</code>.</li>
+  <li>Zdrojové timestampy jsou v místním čase (CET/CEST), normalizované přes <code>AT TIME ZONE</code>.</li>
+  <li><strong>Efektivní místní hranice se posouvá se zimní/letní časem:</strong></li>
+</ul>
+<table>
+  <tr>
+    <th>Nastavený CutoffDate (UTC)</th>
+    <th>Efektivní místní hranice</th>
+  </tr>
+  <tr>
+    <td>2024-01-01 (zima, CET = UTC+1)</td>
+    <td>2024-01-01 01:00 místně</td>
+  </tr>
+  <tr>
+    <td>2024-07-01 (léto, CEST = UTC+2)</td>
+    <td>2024-07-01 02:00 místně</td>
+  </tr>
+</table>
+
+<h3>4.2 Live preview a konsolová podpora</h3>
+<p><strong>Když nastavíte fixní cutoff date:</strong></p>
+<ul>
+  <li>Editor ukazuje <strong>EFEKTIVNÍ MÍSTNÍ hranici</strong> v reálném čase (např. "1. 1. 2024 1:00").</li>
+  <li>Pole je označeno jako "UTC", aby bylo jasné, že zadáváte UTC čas.</li>
+  <li>Operátor vidí skutečnou hranici bez ručních výpočtů.</li>
+  <li><strong>Doporučení:</strong> Pokud si nejste jisti, použijte relativní retenci (RetentionDays) &ndash; žádná TZ ambiguita.</li>
+</ul>
+
+<hr>
+
+<h2 id="5-audit-a-protokolovani">5. Audit a protokolování</h2>
+
+<h3>5.1 Čtyři úrovně auditu (AuditLevel)</h3>
+<p>Každý proces má konfigurovatelný audit, který řídí, kolik stop se zapíše o reálném běhu (DryRun je vždy bez auditu):</p>
+
+<table>
+  <tr>
+    <th>AuditLevel</th>
+    <th>Co se zapisuje</th>
+    <th>Náklad</th>
+    <th>Kdy používat</th>
+  </tr>
+  <tr>
+    <td><code>NONE</code></td>
+    <td>Jen <code>Run</code>, <code>RunItem</code>, <code>RunItemObject</code> (bez per-row evidence)</td>
+    <td>~0%</td>
+    <td>Vysokoobjemové log úklidy (RF_LOG2)</td>
+  </tr>
+  <tr>
+    <td><code>BATCH</code></td>
+    <td>Shrnutí per-batch (default pilot nastavení)</td>
+    <td>~0%</td>
+    <td>Rutinní monitoring</td>
+  </tr>
+  <tr>
+    <td><code>OBJECT</code></td>
+    <td>Per-object shrnutí (aktuálně stejné chování jako BATCH)</td>
+    <td>~0%</td>
+    <td>Budoucí rozšíření</td>
+  </tr>
+  <tr>
+    <td><code>ROW</code></td>
+    <td>Jeden <code>RunDocAudit</code> řádek per zpracovaný klíč/dokument</td>
+    <td>~21% výkonu</td>
+    <td>Dokladové procesy (SHIPPING, RECEIVING) nebo compliance požadavky</td>
+  </tr>
+</table>
+
+<h3>5.2 Auditní tabulky a views</h3>
+<ul>
+  <li><code>arch.Run</code> &ndash; záznam jednoho běhu (ProcessCode, SourceDb, ArchiveDb, čas spuštění, status, counts).</li>
+  <li><code>arch.RunItem</code> &ndash; jedna dávka v rámci běhu (status, počet archivovaných/smazaných řádků).</li>
+  <li><code>arch.RunItemObject</code> &ndash; kterou tabulku/objekt jedna dávka zpracovala.</li>
+  <li><code>arch.RunDocAudit</code> &ndash; <strong>pouze se zapíše pokud AuditLevel = ROW/OBJECT</strong>. Pro každý zpracovaný klíč jeden řádek s linkem na <code>RunItemId</code>.</li>
+  <li><code>arch.v_RunDocAuditDetailed</code> &ndash; efektivní pohled s plným trasem (klíč, proces, zdrojová DB, archivní DB, cutoff, status, counts).</li>
+</ul>
+
+<h3>5.3 Čtyři stavy běhu (Run status)</h3>
+<p>Každý běh (<code>arch.Run</code>) i každá dávka (<code>arch.RunItem</code>) se řídí přesně <strong>čtyřmi stavy</strong> danými DB CHECK constraint:</p>
+
+<table>
+  <tr>
+    <th>Stav</th>
+    <th>Popis</th>
+    <th>Terminální?</th>
+  </tr>
+  <tr>
+    <td><code>RUNNING</code></td>
+    <td>Běh právě probíhá. Viditelné v Runs panelu jako aktivní.</td>
+    <td>Ne &ndash; přejde do OK / FAILED / DRYRUN</td>
+  </tr>
+  <tr>
+    <td><code>OK</code></td>
+    <td>Úspěšně dokončeno. archived == deleted, Divergence = 0.</td>
+    <td>Ano</td>
+  </tr>
+  <tr>
+    <td><code>FAILED</code></td>
+    <td>Chyba nebo manuálně zastaven operátorem. Data jsou konzistentní &ndash; částečně zpracované dávky se atomicky rollbackují. Příště se zpracování obnoví od místa přerušení.</td>
+    <td>Ano</td>
+  </tr>
+  <tr>
+    <td><code>DRYRUN</code></td>
+    <td>Náhledový běh &ndash; žádná data nebyla změněna ani smazána (pouze materializace kandidátů do WorkBatch pro ANCHOR).</td>
+    <td>Ano</td>
+  </tr>
+</table>
+
+<blockquote>
+  <strong>Pozor: stav STOPPED neexistuje.</strong> Pokud operátor pošle pokyn k zastavení (<em>Stop run</em> v konzoli), běh skončí jako <code>FAILED</code> &ndash; ale v tabulce <code>arch.Run</code> bude vyplněno pole <code>CancelRequestedBy</code> a <code>CancelReason</code>. Podle přítomnosti tohoto pole lze odlišit &bdquo;chybový&ldquo; FAILED od &bdquo;manuálně zastaveného&ldquo; FAILED.
+</blockquote>
+
+<h3>5.4 DryRun</h3>
+<ul>
+  <li><strong>DryRun = 1</strong> &ndash; náhled bez změny dat. Zobrazí kandidáty, nic nesmaže/nearchivuje. Pro ANCHOR procesy se materializují preview klíče do <code>WorkBatch</code>; operátor si může klíče projít než spustí reálný run.</li>
+  <li><strong>DryRun = 0</strong> &ndash; reálné zpracování (s AuditLevel kontrolujícím granularitu evidence).</li>
+</ul>
+
+<h3>5.5 Change history (ConfigChangeSet)</h3>
+<p>Každá konfigurační změna v Admin Console je zaznamenána v <code>arch.ConfigChangeSet</code>:</p>
+<ul>
+  <li>Kdo ji udělal (RequestedBy).</li>
+  <li>Kdy.</li>
+  <li>Mandatory change reason (&ge;6 znaků).</li>
+  <li>Která pole se změnila.</li>
+  <li>Status (Published &ndash; okamžitě po uložení).</li>
+</ul>
+<p>Viditelný v Admin Console panelu <strong>Change history</strong>, exportovatelný do CSV.</p>
+
+<hr>
+
+<h2 id="6-bezpecnost-a-pristup">6. Bezpečnost a přístup (role L1 / L2)</h2>
+
+<h3>6.1 Rozdělení rolí: L1 a L2</h3>
+<p>Každý operátor v <code>arch.ConsoleOperator</code> má příznak <code>IsElevated</code> (bit), který určuje, ke kterým operacím má přístup:</p>
+
+<table>
+  <tr>
+    <th>Úroveň</th>
+    <th>IsElevated</th>
+    <th>Co může dělat</th>
+    <th>Co nemůže</th>
+  </tr>
+  <tr>
+    <td><strong>L1 &ndash; první linie</strong></td>
+    <td>0</td>
+    <td>Dashboard (přehled + zdraví), Runs (prohlížení + detail), Document lookup (kde je doklad?), monitoring stavu, čtení konfigurace, čtení auditního logu</td>
+    <td>Editovat konfiguraci, spouštět restore, přidávat legal holds, ovládat SQL Agent joby, go-live akce</td>
+  </tr>
+  <tr>
+    <td><strong>L2 &ndash; druhá linie</strong></td>
+    <td>1</td>
+    <td>Vše co L1 + editace konfigurace, validace, spuštění běhů, restore z archivu, legal holds (add/release), ovládání jobů, go-live kontrolní seznam, správa operátorů</td>
+    <td>PurgeArchive=1 (smazání archivní kopie) &ndash; výhradně DBA přes přímý SQL pod <code>karch_approver</code></td>
+  </tr>
+</table>
+
+<p>Příznak <code>IsElevated</code> se nastavuje v panelu <strong>Configuration &rarr; Operators</strong> (vyžaduje samo L2 přístup). V auditním záznamu (<code>arch.ConfigChangeSet</code>) je vždy zaznamenáno jméno operátora (RequestedBy).</p>
+
+<h4>DB role vs. konzolová úroveň</h4>
+<table>
+  <tr><th>DB role</th><th>Konzolová úroveň</th><th>Klíčová oprávnění</th></tr>
+  <tr><td><code>karch_viewer</code></td><td>L1</td><td>SELECT readiness, config, runs (read-only)</td></tr>
+  <tr><td><code>karch_operator</code></td><td>L1</td><td>Stop runs, view logs</td></tr>
+  <tr><td><code>karch_config_admin</code></td><td>L2</td><td>Edit config, save operators, get auth</td></tr>
+  <tr><td><code>karch_advanced_admin</code></td><td>L2</td><td>Restore z archivu, run verify, legal holds</td></tr>
+  <tr><td><code>karch_approver</code></td><td>L2 / DBA</td><td>Nastavení retention floor, add/release legal holds, PurgeArchive (jen přímý SQL)</td></tr>
+  <tr><td><code>karch_runtime</code></td><td>Runner (ne konzole)</td><td>Execute runner procs; nemá přístup do konzole</td></tr>
+</table>
+
+<h3>6.2 Přihlašování &ndash; čtení volné, editace přes jméno a heslo</h3>
+<p><strong>Čtení je volně přístupné, editace vyžaduje přihlášení.</strong> Panely <strong>Dashboard, Analysis &amp; Estimates, Runs, Document lookup</strong> se zobrazují bez přihlášení (data mají být snadno dostupná). Operační/editační plocha &ndash; <strong>Configuration, Validation, Go-live</strong> (a stop běhu / restore) &ndash; je bráněna <strong>edit lock</strong> autorizací a v produkci povinným <code>RequireAuthenticatedApi</code>.</p>
+<p>Autorizace editace je udělena jednou ze čtyř koexistujících cest (ověřuje se v tomto pořadí). <strong>Výchozí (a doporučený) model je Cesta 1 &ndash; DB operátoři</strong>; ostatní cesty jsou ve výchozím stavu vypnuté a slouží jako opt-in.</p>
+
+<h4>Cesta 1: DB operátoři (výchozí, nezávislé na doméně)</h4>
+<ul>
+  <li>Pojmenovaní operátoři přímo v <code>arch.ConsoleOperator</code> (admin databáze) &ndash; každý má username + <code>PasswordSha256</code> (PBKDF2-HMAC-SHA256) + optional <code>DisplayName</code> + <code>IsEnabled</code> + <code>IsElevated</code> (L1/L2). <strong>Žádné doménové ani SSMS účty nejsou potřeba.</strong></li>
+  <li>Spravují se živě z panelu <strong>Configuration &rarr; Operators</strong> &ndash; přidání / zákaz / změna hesla se projeví ihned, bez zásahu do appsettings a bez restartu app-poolu.</li>
+  <li>Odemykání: username + heslo. RequestedBy v auditu: operátor jménem.</li>
+  <li>Zapnutí: <code>"AdminConsole": { "DbOperatorsEnabled": true }</code> (výchozí v dodávané šabloně).</li>
+  <li><strong>Bootstrap &ndash; sdílený výchozí účet <code>admin</code> (obdoba <code>sa</code> v SSMS):</strong> aby se dalo poprvé přihlásit, nasaďte migraci <code>064_console_default_operator.sql</code>:
+    <ol>
+      <li>vygenerujte hash: <pre><code>KArchiveManager.AdminConsole.Api.exe hash-password "silne-heslo"</code></pre></li>
+      <li>vložte <code>PBKDF2-SHA256$...</code> hodnotu do skriptu (nahraďte <code>CHANGE-ME</code>) a spusťte.</li>
+    </ol>
+    Vytvoří účet <code>admin</code> (enabled, elevated). <strong>Po vytvoření reálných operátorů účet <code>admin</code> zakažte</strong> (Configuration &rarr; Operators), aby byla každá publikovaná změna přiřazena konkrétnímu jménu.
+  </li>
+  <li><strong>Legacy SHA-256 hex:</strong> staré unsalted SHA-256 hexy se ještě ověří (back-compat), ale před produkcí regenerujte jako PBKDF2.</li>
+</ul>
+
+<h4>Cesta 2: Windows/AD identity (opt-in, výchozí vypnuto)</h4>
+<ul>
+  <li>Autentifikovaný Windows uživatel musí být v allowlistu <code>AdminConsole:AdminUsers</code> (např. <code>["DOMAIN\\jnovak"]</code>). Bez hesla; editor ukazuje "Editing as DOMAIN\user".</li>
+  <li>Vyžaduje <code>"WindowsAuthEnabled": true</code> a na IIS webu povolenou <strong>Windows Authentication</strong> (Anonymous zůstane zapnuto pro SPA/readiness).</li>
+</ul>
+<pre><code>"AdminConsole": { "WindowsAuthEnabled": true, "AdminUsers": ["DOMAIN\\jnovak", "DOMAIN\\lsmith"] }</code></pre>
+
+<h4>Cesta 3: Local operator account v appsettings (opt-in, statická)</h4>
+<ul>
+  <li>Statická obdoba Cesty 1 &ndash; operátoři v <code>AdminConsole:Operators</code> (username + <code>PasswordSha256</code>). Změna vyžaduje restart app-poolu; preferujte DB operátory (Cesta 1).</li>
+</ul>
+
+<h4>Cesta 4: Shared password (fallback / break-glass, výchozí vypnuto)</h4>
+<ul>
+  <li><code>AdminConsole:EditPasswordSha256</code> (stejný PBKDF2 formát) &ndash; sdílené heslo <strong>bez uživatelského jména</strong>; RequestedBy v auditu = "SharedPassword" (žádná per-user identita).</li>
+  <li>V dodávané šabloně je <strong>prázdné (vypnuté)</strong>. Zapínejte jen pro nouzový/break-glass přístup a jinak držte vypnuté.</li>
+</ul>
+
+<h3>6.3 Nové panely</h3>
+
+<h4>a) "Poslední přihlášení" (Last login)</h4>
+<p>Read-only panel zobrazující kdo a kdy odemkl editaci. Data z <code>arch.ConsoleLoginAudit</code> (success + failure logins).</p>
+
+<h4>b) "Přístup k editaci" (Edit access) / Operators</h4>
+<p>Panel <strong>Configuration &rarr; Operators</strong> (L2) spravuje DB operátory (Cesta 1) &ndash; přidat / zakázat / změnit heslo / nastavit L1&nbsp;vs&nbsp;L2. Read-only přehled navíc ukazuje:</p>
+<ul>
+  <li>DB operátoři v <code>arch.ConsoleOperator</code> + jejich status (<code>IsEnabled</code>) a úroveň (<code>IsElevated</code> = L1/L2).</li>
+  <li>Windows/AD allowlist (<code>AdminConsole:AdminUsers</code>) &ndash; jen pokud je Cesta 2 zapnutá.</li>
+  <li>Shared password status (configured / not configured) &ndash; ve výchozím stavu not configured.</li>
+</ul>
+
+<h3>6.4 Runtime identity &ndash; least-privilege (T-33)</h3>
+<p><strong>Governance výše řídí KDO smí měnit konfiguraci. Runtime identity řídí CO smí běžec dělat.</strong></p>
+<p>Dedikovaný non-sysadmin runner login je v roli <code>karch_runtime</code> s minimálními právy:</p>
+<ul>
+  <li><strong>Admin DB:</strong> EXECUTE na runner proc chain + VIEW DEFINITION ON SCHEMA::arch (metadata visibility).</li>
+  <li><strong>Zdrojové DBs:</strong> SELECT + DELETE na mapované tabulky (dynamic SQL nechainuje); SELECT na ANCHOR candidate tabulky.</li>
+  <li><strong>Archivní DB:</strong> INSERT + SELECT + ALTER na archive schémata + CREATE TABLE, ale <strong>NE DELETE/UPDATE</strong> (runner nemůže archiv tamper).</li>
+  <li><strong>SQL Agent job:</strong> Job owner je non-sysadmin (ne proxy, ne sysadmin service account).</li>
+  <li><strong>Run-start gate:</strong> <code>arch.usp_VerifyRunnerPrivileges</code> ověří na startu, že runner není sysadmin/db_owner a má přesně deklarovaná práva (jinak THROW 51001).</li>
+</ul>
+
+<h3>6.5 Retention floor (T-21) &ndash; minimální retence</h3>
+<p><code>arch.RetentionPolicy.MinRetentionDays</code> (singleton; default 0 = disabled). Operátor si nastaví minimální počet dní, které se musí uchovávat.</p>
+<p><code>arch.usp_AssertRetentionFloor</code> THROW 50210, pokud by běh smazal řádky mladší než floor. Kontroluje se finální cutoff, takže chytá jak příliš malý RetentionDays tak příliš nedávný CutoffDate. Ověřuje se v TIMESTAMP runneru (027), ANCHOR runneru (015) a při ANCHOR přípravě (014).</p>
+
+<h3>6.6 Legal hold (T-21) &ndash; blokace smazání</h3>
+<ul>
+  <li><code>arch.LegalHold</code> tabulka: (ProcessCode + optional SourceDb + HoldKey) = primární klíč procesu.</li>
+  <li>Aktivní holdy jsou vylučovány z kandidátů na build time (fáze 014/027).</li>
+  <li>Pokud hold přidaný PO přípravě ANCHOR WorkBatch: klíč je "parkován" (status=5) a nikdy se nesmaže/nearchivuje, batch se normálně dokončí.</li>
+  <li>Add/release: <code>karch_approver</code> role (<code>usp_Api_AddLegalHold</code> / <code>usp_Api_ReleaseLegalHold</code>), auditable CreatedBy/ReleasedBy.</li>
+  <li>List: <code>usp_Frontend_GetLegalHolds</code>.</li>
+  <li>Holdy fungují na Key1 group granularnosti (u composite-key procesů je over-inclusive, ale nikdy under-exclusive).</li>
+</ul>
+
+<hr>
+
+<h2 id="7-sql-agent-jobs">7. SQL Agent jobs</h2>
+
+<h3>7.1 Pět klíčových jobů</h3>
+
+<h4>PREP (příprava kandidátů)</h4>
+<p>Kandidáti jsou připraveni v <code>WorkBatch</code> + <code>WorkBatchKey</code> pro ANCHOR strategie. Bez mazání, bez archivace. Job je ve výchozím stavu <strong>disabled</strong> &ndash; aktivuje se z Go-live panelu nebo ručně.</p>
+
+<h4>RUN (hlavní běh)</h4>
+<p>Spouští <code>arch.usp_RunProfile_Prepared</code> &ndash; archivuje a maže dle konfigurace. Volá se v čase/okně. Job je ve výchozím stavu <strong>disabled</strong> &ndash; aktivuje se z Go-live panelu.</p>
+
+<h4>RECOVER (obnova zaseknutých běhů)</h4>
+<p>Viz sekci <a href="#9-2-recovery">9.2 Recovery uvízlých běhů</a>. Job je doporučen spouštět každých <strong>15 minut</strong>, ve výchozím stavu <strong>enabled</strong>.</p>
+
+<h4>BACKUP FULL (denní záloha archivu)</h4>
+<p>Viz sekci <a href="#9-3-zalohy">9.3 Zálohy archivu</a>. Ve výchozím stavu <strong>enabled</strong>, spouští se v 01:30 UTC.</p>
+
+<h4>BACKUP LOG (hodinová záloha transaction logu)</h4>
+<p>Viz sekci <a href="#9-3-zalohy">9.3 Zálohy archivu</a>. Ve výchozím stavu <strong>enabled</strong>, spouští se každou hodinu.</p>
+
+<h3>7.2 Ownership a bezpečnost jobů</h3>
+<table>
+  <tr><th>Job</th><th>Owner</th><th>Důvod</th></tr>
+  <tr><td>PREP, RUN</td><td>runner login (machine account)</td><td>Console potřebuje vlastnit job pro sp_start_job bez sysdmin</td></tr>
+  <tr><td>RECOVER, BACKUP FULL, BACKUP LOG</td><td>sa (nebo sysadmin)</td><td>Runner nemá BACKUP DATABASE ani VIEW SERVER STATE</td></tr>
+</table>
+
+<h3>7.3 Scheduling a run window</h3>
+<ul>
+  <li><code>arch.RunProfile.RunWindowMinutes</code> &ndash; max délka běhu v minutách. Běh se sám ukončí.</li>
+  <li><code>@StopAtUtc</code> parametr &ndash; běh se zastaví před tímto UTC časem.</li>
+  <li><code>DelayMsBetweenBatches</code> &ndash; prodleva mezi dávkami (zátěž snižování).</li>
+</ul>
+
+<h3>7.4 Ovládání jobů z konzole</h3>
+<p>Panel <strong>Configuration &rarr; SQL Agent Jobs</strong> (L2 přístup) umožňuje:</p>
+<ul>
+  <li>Zobrazit stav a historii jobů.</li>
+  <li>Enable/disable job (nastaví SQL Agent enabled flag).</li>
+  <li>Změnit scheduling (čas spuštění, interval).</li>
+  <li>Spustit job ad-hoc (sp_start_job).</li>
+</ul>
+<p>Čtení stavu jobů (GetAgentJobs, GoLiveReadiness) vyžaduje SELECT na msdb job tabulkách &ndash; zajišťuje script 059 (Console job control grants).</p>
+
+<hr>
+
+<h2 id="8-vykon-a-optimalizace">8. Výkon a optimalizace</h2>
+
+<h3>8.1 Archivní primární klíč &ndash; proč jej uchovávat</h3>
+<p>Archivní tabulky zrcadlí zdrojové sloupce <strong>včetně primárního klíče</strong> (např. RF_LOG2.ROWID). PK není dekorace &ndash; tři features na něm závisí:</p>
+<ul>
+  <li><strong>Mode 2 idempotence:</strong> Re-run nesmí duplikovat řádky. Dedup je po PK: druhá kopie stejných řádků vloží 0 řádků.</li>
+  <li><strong>Restore korektnost:</strong> <code>usp_RestoreFromArchive</code> spoléhá na key identity aby vrátila řádky bez duplikace.</li>
+  <li><strong>Duplicate-archive prevention:</strong> Unique gate (50115) a archive-as-system-of-record záruka.</li>
+</ul>
+
+<h3>8.2 Size/throughput trade-off (měřeno)</h3>
+<p>Clustered PK maintenance zvyšuje cost vkládání jak se archiv zvětšuje. Totožný 200k RF_LOG2 run, cheap-mode, <strong>jedinou odchylkou archiv velikost na startu:</strong></p>
+<table>
+  <tr>
+    <th>Velikost archivní tabulky na startu</th>
+    <th>Throughput</th>
+  </tr>
+  <tr>
+    <td>Prázdná</td>
+    <td>~9 100 řádků/s</td>
+  </tr>
+  <tr>
+    <td>~5M+ nahromaděno</td>
+    <td>~2 900 řádků/s (&asymp;3&times; pomalejší)</td>
+  </tr>
+</table>
+<p>To je <strong>dominantní throughput faktor</strong> &ndash; větší než audit level. Akceptovaný cost indexovaného, dedup-capable archivu.</p>
+
+<h3>8.3 Mitigace výkonu (priorita)</h3>
+
+<h4>1. Index parking (052_archive_with_index_parking.sql) &ndash; ~1.5&times; rychlejší</h4>
+<ul>
+  <li>Deaktivuje non-clustered archivní indexy během běhu, po dokončení je znovastaví.</li>
+  <li>Plně reversible.</li>
+  <li>Vyžaduje <code>@KeepIndexesCsv</code> = index potřebný pro běh; THROW 50700 na prázdný list, rebuild bezpodmínečně po archive fázi.</li>
+  <li>Používat v maintenance window pro velké loads.</li>
+</ul>
+
+<h4>2. BatchRowCount tuning</h4>
+<ul>
+  <li>Menší batch = menší lock footprint, ale per-batch overhead.</li>
+  <li>Větší batch = rychlejší, ale více locks.</li>
+  <li>S <code>LOCK_ESCALATION=DISABLE</code> na multi-index source tabulkách: ~10k&ndash;50k je dobrý range.</li>
+</ul>
+
+<h4>3. Partitioning (100M+ archiv)</h4>
+<ul>
+  <li>Range-partition archiv po datu.</li>
+  <li>Inserty budou hit nejnovější partition, stará data se mohou switchnout na purge/cold storage.</li>
+</ul>
+
+<h3>8.4 NEDĚLEJTE:</h3>
+<ul>
+  <li>&#10060; Nealterujte PK na live archive tabulkách.</li>
+  <li>&#10060; Nevytvářejte source indexy bez explicitního approval (runner je nebere, a kazí customer OLTP).</li>
+</ul>
+
+<hr>
+
+<h2 id="9-operacni-funkce">9. Operační funkce</h2>
+
+<h3 id="9-1-restore">9.1 Restore z archivu</h3>
+
+<h4>Princip</h4>
+<p>Funkce vrací řádky z archivní DB zpět do zdrojové (produkční) DB. Jde o inverzní operaci k archivaci: místo přesunu zdroj &rarr; archiv se přesouvá archiv &rarr; zdroj.</p>
+
+<p><strong>Klíčové vlastnosti:</strong></p>
+<ul>
+  <li><strong>Idempotentní</strong> &ndash; obnoví jen řádky, které ve zdroji chybí (NOT EXISTS na primárním klíči); pokud tam řádek už je, přeskočí se.</li>
+  <li><strong>Transakční</strong> &ndash; celý restore běží v jedné transakci (buď vše, nebo nic).</li>
+  <li><strong>Výchozí DryRun=1</strong> &ndash; bez explicitního <code>@DryRun=0</code> se nic nezapíše, jen se ukáže náhled.</li>
+  <li><strong>Archiv zůstane nedotčen</strong> &ndash; <code>@PurgeArchive</code> je výchozně 0; smazání archivní kopie je extra operace s dalšími vrstvami ochrany.</li>
+  <li><strong>Auditovaná</strong> &ndash; každý reálný restore (nebo purge) zapíše append-only záznam do <code>arch.RestoreAudit</code>.</li>
+</ul>
+
+<h4>Jak to technicky probíhá</h4>
+<pre><code>[Archivní DB] → SELECT chybějících řádků → INSERT do [zdrojové DB]</code></pre>
+<p>Procedura (<code>arch.usp_RestoreFromArchive</code>, deploy 042) zpracovává tabulky v <strong>obráceném DeleteOrder</strong> (masters před children, aby FK nevyvolaly chybu), a pro tabulky s IDENTITY sloupci automaticky nastavuje <code>SET IDENTITY_INSERT ON/OFF</code>.</p>
+
+<h4>Parametry procedury</h4>
+<table>
+  <tr><th>Parametr</th><th>Výchozí</th><th>Popis</th></tr>
+  <tr><td><code>@ProcessCode</code></td><td>&mdash;</td><td>Povinný &ndash; který process obnovit</td></tr>
+  <tr><td><code>@SourceDb</code></td><td>&mdash;</td><td>Povinný &ndash; cílová (produkční) DB</td></tr>
+  <tr><td><code>@ArchiveDb</code></td><td>&mdash;</td><td>Povinný &ndash; zdrojová (archivní) DB</td></tr>
+  <tr><td><code>@DryRun</code></td><td>1</td><td>1 = jen náhled, 0 = reálný zápis</td></tr>
+  <tr><td><code>@MaxRows</code></td><td>NULL</td><td>Volitelný limit řádků na tabulku</td></tr>
+  <tr><td><code>@PurgeArchive</code></td><td>0</td><td>1 = smaž archivní kopii po obnovení (DBA only)</td></tr>
+  <tr><td><code>@RequestedBy</code></td><td>&mdash;</td><td>Audit attribution (jméno operátora)</td></tr>
+</table>
+
+<h4>Dvouvrstvé bezpečnostní brány</h4>
+<p><strong>Vrstva 1 &ndash; API endpoint</strong> (<code>POST /api/runs/restore</code>):</p>
+<table>
+  <tr><th>Režim</th><th>Požadovaná autorizace</th></tr>
+  <tr><td>DryRun = true</td><td><code>security.IsAuthorized()</code> &ndash; standardní edit-token nebo L1+ operator</td></tr>
+  <tr><td>DryRun = false</td><td><code>security.IsElevated()</code> &ndash; operátor s IsElevated=1 (L2) nebo ElevatedAdminUsers</td></tr>
+</table>
+<p>API <strong>vždy posílá <code>@PurgeArchive=false</code></strong> &ndash; bez ohledu na to, co pošle klient. Smazání archivní kopie přes konzoli není možné, jde pouze přes přímý <code>EXEC</code> v SQL.</p>
+
+<p><strong>Vrstva 2 &ndash; SQL procedura</strong> (pokud by někdo zavolal přímo s <code>@PurgeArchive=1</code>):</p>
+<pre><code>IF IS_MEMBER('karch_approver') = 0 AND IS_SRVROLEMEMBER('sysadmin') = 0
+    THROW 50404, 'Purging the archive requires membership in karch_approver.', 1;
+IF @PurgeAuditLevel &lt;&gt; N'ROW'
+    THROW 50405, 'Purging blocked for AuditLevel &lt; ROW...', 1;</code></pre>
+
+<h4>Kdo to může dělat</h4>
+<table>
+  <tr><th>DB role / konzolová úroveň</th><th>DryRun náhled</th><th>Reálný restore</th><th>PurgeArchive=1</th></tr>
+  <tr><td>karch_viewer (L1)</td><td>Ne</td><td>Ne</td><td>Ne</td></tr>
+  <tr><td>karch_operator (L1)</td><td>Ne</td><td>Ne</td><td>Ne</td></tr>
+  <tr><td>karch_config_admin &ndash; záměrně bez EXECUTE na restore</td><td>Ne</td><td>Ne</td><td>Ne</td></tr>
+  <tr><td>karch_advanced_admin (L2, IsElevated=1)</td><td>Ano</td><td>Ano (přes konzoli)</td><td>Ne (API blokuje)</td></tr>
+  <tr><td>karch_approver / sysadmin</td><td>Ano</td><td>Ano</td><td>Ano (jen přímý SQL)</td></tr>
+</table>
+
+<h4>Postup pro L2 operátora</h4>
+<ol>
+  <li>Přihlásit se jako L2 operátor (IsElevated=1).</li>
+  <li>V panelu <strong>Runs &rarr; Restore</strong> vybrat ProcessCode, SourceDb, ArchiveDb.</li>
+  <li>Spustit DryRun &ndash; ověřit v náhledu kolik řádků se vrátí a do kterých tabulek.</li>
+  <li>Potvrdit reálný restore (DryRun=false).</li>
+  <li>Restore zapíše záznam do <code>arch.RestoreAudit</code> (immutable).</li>
+</ol>
+
+<hr>
+
+<h3 id="9-2-recovery">9.2 Recovery uvízlých běhů</h3>
+
+<h4>Princip</h4>
+<p>Procedura <code>arch.usp_RecoverStaleRuns</code> (deploy 030) automaticky detekuje a uzavírá osiřelé záznamy Run/RunItem/WorkBatch, které neukončily svůj životní cyklus (session zrušena, server restartoval, klient se odpojil během běhu).</p>
+
+<h4>Co je "stale"?</h4>
+<ul>
+  <li><strong>Stale Run:</strong> Status=&lsquo;RUNNING&rsquo; a <code>StartedAt &lt; (now - @StaleAfterMinutes)</code> (výchozí: 30 minut).</li>
+  <li><strong>Stale WorkBatch:</strong> Status=&lsquo;Running&rsquo; a <code>LastProgressAtUtc &lt; (now - @StaleAfterMinutes)</code>.</li>
+</ul>
+
+<h4>Logika obnovy</h4>
+<table>
+  <tr><th>Stav RunItem</th><th>Akce na arch.Run</th></tr>
+  <tr><td>OK</td><td>Run.Status = &lsquo;OK&rsquo;, EndedAt = max(RunItem.EndedAt)</td></tr>
+  <tr><td>FAILED</td><td>Run.Status = &lsquo;FAILED&rsquo;, nastaví EndedAt a ErrorMessage</td></tr>
+  <tr><td>DRYRUN</td><td>Run.Status = &lsquo;DRYRUN&rsquo;</td></tr>
+  <tr><td>RUNNING nebo NULL</td><td>Run.Status = &lsquo;FAILED&rsquo; (nikdy se neinferuje úspěch z chybějících dat)</td></tr>
+</table>
+<p>Pro WorkBatch: pokud jsou všechny klíče zpracovány &rarr; Status=&lsquo;Completed&rsquo;; jinak &rarr; Status=&lsquo;Paused&rsquo; (lze obnovit v příštím běhu) + reset Status=1 (claimed) klíčů na Status=0 (unclaimed).</p>
+
+<h4>Bezpečnostní záchrana</h4>
+<p>Recovery NIKDY neuzavírá běh, pokud je worker session stále naživu &ndash; ověřuje <code>sys.dm_exec_sessions</code>, aby se vyhnula race condition mezi legitimním dlouhým během a recovery procesem.</p>
+
+<h4>Parametry</h4>
+<table>
+  <tr><th>Parametr</th><th>Výchozí</th><th>Popis</th></tr>
+  <tr><td><code>@StaleAfterMinutes</code></td><td>30</td><td>Práh timeout v minutách</td></tr>
+  <tr><td><code>@DryRun</code></td><td>0</td><td>1 = jen ukáže co by obnovil, 0 = aplikuje</td></tr>
+  <tr><td><code>@MaxRecoveries</code></td><td>100</td><td>Bezpečnostní limit (anti-runaway)</td></tr>
+  <tr><td><code>@VerboseOutput</code></td><td>1</td><td>Tisk diagnostiky do výstupu jobu</td></tr>
+</table>
+
+<h4>SQL Agent job</h4>
+<p>Job <strong>"kArchiveManager - RECOVER STALE RUNS"</strong> běží každých <strong>15 minut</strong>. Ve výchozím stavu <strong>enabled</strong>. Go-live readiness check ověřuje, že job je enabled.</p>
+
+<hr>
+
+<h3 id="9-3-zalohy">9.3 Zálohy archivu</h3>
+
+<h4>Princip</h4>
+<p>Zálohovacký systém chrání <code>kArchiveManagerBackups</code> &ndash; systém-of-record pro všechny přesunuté řádky. Doporučen FULL recovery model na archivní DB.</p>
+
+<h4>Strategie FULL + LOG</h4>
+<table>
+  <tr><th>Typ</th><th>Frekvence</th><th>Výchozí čas</th><th>Retence</th></tr>
+  <tr><td><strong>FULL backup</strong></td><td>Denně</td><td>01:30 UTC</td><td>35 dní</td></tr>
+  <tr><td><strong>LOG backup</strong></td><td>Každou hodinu</td><td>každou celou hodinu</td><td>8 dní</td></tr>
+</table>
+
+<h4>Co každý typ dělá</h4>
+<p><strong>FULL backup:</strong></p>
+<ul>
+  <li>Vytvoří <code>.bak</code> soubor: <code>{BackupRoot}\kArchiveManagerBackups_FULL_yyyyMMdd_HHmmss.bak</code></li>
+  <li><code>WITH COMPRESSION, CHECKSUM, INIT, STATS = 10</code></li>
+  <li>Ihned po zápisu: <code>RESTORE VERIFYONLY</code> s CHECKSUM (ověří integritu).</li>
+  <li>Vyčistí staré FULL backupy starší než 35 dní.</li>
+</ul>
+<p><strong>LOG backup:</strong></p>
+<ul>
+  <li>Kontrola: pouze pokud DB je v FULL recovery modelu.</li>
+  <li>Vytvoří <code>.trn</code> soubor: <code>{BackupRoot}\kArchiveManagerBackups_LOG_yyyyMMdd_HHmmss.trn</code></li>
+  <li><code>WITH COMPRESSION, CHECKSUM</code></li>
+  <li>Vyčistí staré LOG backupy starší než 8 dní.</li>
+</ul>
+
+<h4>Konfigurace (parametry scriptu 048)</h4>
+<table>
+  <tr><th>Parametr</th><th>Výchozí</th><th>Popis</th></tr>
+  <tr><td><code>@BackupRoot</code></td><td><em>CHANGE-ME</em></td><td>Fyzická cesta pro zálohy (Agent service account musí mít write přístup)</td></tr>
+  <tr><td><code>@RetentionDaysFull</code></td><td>35</td><td>Dny uchování FULL backupů</td></tr>
+  <tr><td><code>@RetentionDaysLog</code></td><td>8</td><td>Dny uchování LOG backupů</td></tr>
+  <tr><td><code>@FullDailyTime</code></td><td>013000</td><td>Čas FULL backupu (HHMMSS formát)</td></tr>
+  <tr><td><code>@LogEveryMinutes</code></td><td>60</td><td>Interval LOG backupu v minutách</td></tr>
+</table>
+
+<blockquote>
+  <strong>Poznámka:</strong> Toto je fallback zálohovací řešení. Pokud zákazník používá Ola Hallengren nebo jiný maintenance plán, integrujte tam &ndash; nepoužívejte oba systémy souběžně.
+</blockquote>
+
+<h4>Go-live ověření zálohy</h4>
+<p>Go-live readiness check ověřuje, že FULL backup proběhl v posledních 2 dnech. Pokud ne, panel zobrazí WARN.</p>
+
+<hr>
+
+<h3 id="9-4-validace">9.4 Validace konfigurace</h3>
+
+<h4>Princip</h4>
+<p>Procedura <code>arch.usp_ValidateConfiguration</code> provede 50+ kontrol konfigurace a vrátí nálezy s kategorizovanou závažností. Spouští se z panelu <strong>Configuration &rarr; Validate</strong> nebo automaticky při Go-live readiness.</p>
+
+<h4>Výstupní formát</h4>
+<table>
+  <tr><th>Sloupec</th><th>Popis</th></tr>
+  <tr><td><code>Severity</code></td><td>'ERROR' / 'WARN' / 'INFO'</td></tr>
+  <tr><td><code>ProcessCode</code>, <code>SourceDb</code>, <code>ArchiveDb</code></td><td>Kde byl nález</td></tr>
+  <tr><td><code>Finding</code></td><td>Popis problému</td></tr>
+  <tr><td><code>SuggestedSql</code></td><td>Konkrétní SQL oprava (kde je deterministická)</td></tr>
+</table>
+
+<h4>Hlavní oblasti kontrol</h4>
+<table>
+  <tr><th>Oblast</th><th>Příklady</th><th>Severity</th></tr>
+  <tr><td>Povinné objekty</td><td>Proces bez ObjectSpec; mapování bez aktivní zdrojové DB</td><td>ERROR</td></tr>
+  <tr><td>Redundantní override</td><td>ProcessDatabase kopíruje přesně Process default</td><td>WARN</td></tr>
+  <tr><td>ANCHOR strategie</td><td>Anchor bez schema/table/expr</td><td>ERROR</td></tr>
+  <tr><td>TIMESTAMP strategie</td><td>Bez TimestampExpr; DeleteMode nekompatibilní</td><td>ERROR</td></tr>
+  <tr><td>Časové pásmo</td><td>AT TIME ZONE s neznámou zónou (není v sys.time_zone_info)</td><td>WARN</td></tr>
+  <tr><td>Cheap-mode</td><td>CandidateSelectExpr bez CandidateWhereSql (mode se neaktivuje)</td><td>WARN</td></tr>
+  <tr><td>Databáze</td><td>SourceDb/ArchiveDb neexistuje; Source==Archive pro Mode=1/2</td><td>ERROR</td></tr>
+  <tr><td>Tabulky</td><td>Source/Archive tabulka neexistuje; mismatch ObjectSpec.DeleteMode</td><td>ERROR</td></tr>
+  <tr><td>Delete ochrana</td><td>AllowDeleteWithoutArchive=0 + Mode=0 kombinace</td><td>ERROR</td></tr>
+</table>
+
+<h4>Návratový kód</h4>
+<ul>
+  <li><code>0</code> &ndash; OK, žádné ERROR nálezy</li>
+  <li><code>1</code> &ndash; existují ERROR nálezy; RUN CONFIGURED job odmítne spustit dokud nejsou opraveny</li>
+</ul>
+
+<h4>Parametry</h4>
+<ul>
+  <li><code>@ProcessCode</code> (NULL = všechny procesy)</li>
+  <li><code>@SourceDb</code> (NULL = všechny zdrojové DBs)</li>
+</ul>
+
+<hr>
+
+<h3 id="9-5-odhady">9.5 Odhady dopadu</h3>
+
+<h4>Princip</h4>
+<p>Procedura <code>arch.usp_Api_EstimateNextRunImpact</code> (deploy 060) odhaduje kolik dat by příští běh přesunul (řádky + MB), projekční nárůst archivu, tlak na log a plánovací kalkulaci s safety faktorem &ndash; per-process i per-tabulku.</p>
+
+<h4>Odhady jsou výchozně skryty</h4>
+<p>V panelu Analysis &amp; Estimates jsou odhady výchozně skryté (mohou trvat sekundy pro velké databáze). Zobrazí se kliknutím na "Show estimates".</p>
+
+<h4>Parametry</h4>
+<table>
+  <tr><th>Parametr</th><th>Výchozí</th><th>Popis</th></tr>
+  <tr><td><code>@SourceDb</code></td><td>NULL</td><td>NULL = všechny enabled zdrojové DBs</td></tr>
+  <tr><td><code>@ArchiveDb</code></td><td>NULL</td><td>NULL = všechny</td></tr>
+  <tr><td><code>@ProcessCode</code></td><td>NULL</td><td>NULL = všechny enabled procesy</td></tr>
+  <tr><td><code>@ArchiveGrowthFactor</code></td><td>1.20</td><td>20% režie na PK/indexy v archivu</td></tr>
+  <tr><td><code>@LogMultiplier</code></td><td>3.00</td><td>3× payload pro log pressure</td></tr>
+  <tr><td><code>@SafetyFactor</code></td><td>1.30</td><td>30% bezpečnostní buffer</td></tr>
+</table>
+
+<h4>Výstupní metriky (per-process)</h4>
+<table>
+  <tr><th>Metrika</th><th>Co znamená</th></tr>
+  <tr><td>SourceRowsTotalAcrossConfiguredTables</td><td>Celkové řádky v mapovaných tabulkách</td></tr>
+  <tr><td>OneToOnePayloadMB</td><td>Odhadovaný objem dat k přesunu</td></tr>
+  <tr><td>RoughArchiveGrowthMB</td><td>Nárůst archivní DB (jen Mode=1)</td></tr>
+  <tr><td>RoughLogPressureMB</td><td>Odhadovaný tlak na transaction log</td></tr>
+  <tr><td>PlanningMB_WithSafety</td><td>Plánovaný MB s bezpečnostním bufferem</td></tr>
+</table>
+
+<hr>
+
+<h3 id="9-6-golive">9.6 Go-live kontrolní seznam</h3>
+
+<h4>Princip</h4>
+<p>Procedura <code>arch.usp_Frontend_GoLiveReadiness</code> (deploy 049) serializuje produkční audit jako go-live gate. Zobrazí se v panelu <strong>Go-live</strong> v konzoli (L2 přístup).</p>
+<p>Vrací jednu řadu na check s Category, CheckName, Severity (OK/INFO/WARN/FAIL), Detail a Recommendation.</p>
+
+<h4>Pět kategorií kontrol</h4>
+<table>
+  <tr><th>Kategorie</th><th>Kontroly</th></tr>
+  <tr>
+    <td><strong>A. Privileges</strong></td>
+    <td>
+      Žádní over-privileged principálové<br>
+      Destruktivní procs grantovány správným rolím (restore &rarr; karch_advanced_admin)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>B. Cleanliness</strong></td>
+    <td>
+      Žádné legacy_v1 / v1-stub procedury<br>
+      Žádné relic tabulky (RowCountSnapshot, *_Backup_*)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>C. Audit Governance</strong></td>
+    <td>
+      Per-document audit coverage (Mode=1 doklady by měly mít AuditLevel=ROW)<br>
+      Audit trail tamper-resistant (DENY UPDATE/DELETE na arch.RunDocAudit)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>D. Config/Timezone Gate</strong></td>
+    <td>
+      Všechny enabled Mode=1 cutoff expression mají AT TIME ZONE<br>
+      (jinak REAL runs zablokuje THROW 50200)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>E. Operations</strong></td>
+    <td>
+      Žádné ERROR řádky v arch.v_OperationalHealth<br>
+      Failure alerting nakonfigurován (Database Mail + operator + job notify)<br>
+      Archivní DB má FULL backup v posledních 2 dnech<br>
+      RECOVER STALE RUNS job je enabled
+    </td>
+  </tr>
+</table>
+
+<h4>Výsledný verdikt</h4>
+<ul>
+  <li><strong>FAIL</strong> &ndash; go-live blokátor; je nutné opravit před spuštěním produkčních jobů.</li>
+  <li><strong>WARN</strong> &ndash; upozornění; lze spustit ale doporučeno řešit.</li>
+  <li><strong>OK</strong> &ndash; vše v pořádku.</li>
+</ul>
+
+<hr>
+
+<h2 id="10-operacni-zaruka">10. Operační záruka bezpečnosti</h2>
+
+<p><strong>Tyto záruky byly ověřeny live testováním (~5M řádků, všechny varianty).</strong></p>
+
+<h3>10.1 Mode 1 invarianta (archivace + mazání)</h3>
+<ul>
+  <li><code>archived == deleted</code> v každé dávce.</li>
+  <li><code>Divergence = 0</code> (GlobalDivergence, DivergentMode1, BadRuns všechny = 0).</li>
+  <li><strong>Mechanismus:</strong> <code>DELETE ... OUTPUT INTO archive</code>, atomicky per dávce. Zdrojový řádek je archivován a smazán v jedné transakci.</li>
+</ul>
+
+<h3>10.2 Lock-bezpečnost na zdrojovém serveru</h3>
+<ul>
+  <li><strong>Candidate selection (PREP):</strong> Používá <code>WITH (NOLOCK)</code>. Drží <strong>jen OBJECT Sch-S</strong> na zdroji (schema-stability lock), <strong>NULA S/IS/X/U data locks</strong>. Sch-S nikdy neblokuje INSERT/UPDATE/DELETE &rarr; candidate selection nemůže blokovat OLTP aplikaci.</li>
+  <li><strong>DELETE (RUN):</strong> X-locks (mutace, v okně); malé, bounded batches. <code>LOCK_ESCALATION=DISABLE</code> na multi-index tabulkách zabraňuje escalation.</li>
+  <li><strong>Proof (lock probe):</strong> Během ~40s NOLOCK candidate scan Edge.RF_LOG2, session drží jen Sch-S &ndash; nula data locks.</li>
+</ul>
+
+<h3>10.3 Concurrency (dva běhy, totožné mapování)</h3>
+<ul>
+  <li>AppLock serializuje dva běhy stejného mapování (TIMESTAMP a ANCHOR).</li>
+  <li>Jeden běží, druhý je čistě odmítnut (nenastane double-archiving, deadlock).</li>
+</ul>
+
+<h3>10.4 Retention floor (50210)</h3>
+<ul>
+  <li>Blokuje smazání dat mladších než policy minimum.</li>
+  <li>DryRun je vyjmut (preview není omezena).</li>
+</ul>
+
+<h3>10.5 Legal hold</h3>
+<ul>
+  <li>Držená data jsou vyloučena/parkována.</li>
+  <li>Nikdy se nearchivují/nemažou, dokud nejsou uvolněna.</li>
+</ul>
+
+<h3>10.6 Crash-consistency (kilování běhu mid-batch)</h3>
+<ul>
+  <li>In-flight batch se atomicky rollbackuje (nic se nestratí, nic se neduplikuje).</li>
+  <li><code>arch.usp_RecoverStaleRuns</code> zavře osiřelé běhy.</li>
+  <li>Zbytek je resumovatelný.</li>
+</ul>
+
+<h3>10.7 Mode tabulka</h3>
+
+<table>
+  <tr>
+    <th>Mode</th>
+    <th>Archivace</th>
+    <th>Mazání</th>
+    <th>Idempotence</th>
+    <th>PK na zdroji</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>&#10003; Archivuje</td>
+    <td>&#10003; Maže</td>
+    <td>Ne (archiv=source)</td>
+    <td>Doporučeno</td>
+  </tr>
+  <tr>
+    <td>0</td>
+    <td>&#10007; Ne</td>
+    <td>&#10003; Maže</td>
+    <td>Ne</td>
+    <td>Doporučeno</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>&#10003; Kopíruje</td>
+    <td>&#10007; Ne (nikdy)</td>
+    <td>&#10003; Ano (dedup po PK)</td>
+    <td>&#10003; Vyžaduje</td>
+  </tr>
+</table>
+
+<h3>10.8 Shrnutí &ndash; co si vzít do paměti</h3>
+<ul>
+  <li>&#10003; Mode 1 je atomic a safe (archived==deleted, Div=0).</li>
+  <li>&#10003; Candidate selection nikdy neblokuje zdrojovou aplikaci (NOLOCK, Sch-S only).</li>
+  <li>&#10003; Dva běhy stejného mapování se serializují (žádný race condition).</li>
+  <li>&#10003; Crash mid-batch je bezpečný (atomic rollback, resumovatelný zbytek).</li>
+  <li>&#10003; Retention floor a legal hold zabraňují případným chybám operátora.</li>
+  <li>&#10003; Archive PK je nezbytný (dedup, restore, duplicate-prevention).</li>
+  <li>&#9888; Archive size (ne audit) je dominant throughput faktor; index parking mitiguje.</li>
+</ul>
+
+<hr>
+
+<h2 id="dodatek">Dodatek &ndash; Klíčové tabulky a views</h2>
+
+<h3>Konfigurace</h3>
+<ul>
+  <li><code>arch.Process</code> &ndash; definice procesu (defaults).</li>
+  <li><code>arch.ProcessDatabase</code> &ndash; per-mapping override.</li>
+  <li><code>arch.ObjectSpec</code> &ndash; objekty (tabulky) v procesu.</li>
+  <li><code>arch.ObjectSpecDatabaseOverride</code> &ndash; per-DB odchylky objektu.</li>
+  <li><code>arch.RunProfile</code> &ndash; deklarativní bundly procesů.</li>
+</ul>
+
+<h3>Runtime &amp; Audit</h3>
+<ul>
+  <li><code>arch.Run</code> &ndash; záznam běhu (Status: RUNNING/OK/FAILED/DRYRUN).</li>
+  <li><code>arch.RunItem</code> &ndash; dávka v běhu.</li>
+  <li><code>arch.RunItemObject</code> &ndash; objekt zpracovaný dávkou.</li>
+  <li><code>arch.RunDocAudit</code> &ndash; per-row evidence (pouze AuditLevel=ROW/OBJECT).</li>
+  <li><code>arch.v_RunDocAuditDetailed</code> &ndash; plný tras.</li>
+  <li><code>arch.RestoreAudit</code> &ndash; immutable záznam každého restore operace.</li>
+</ul>
+
+<h3>Governance &amp; Bezpečnost</h3>
+<ul>
+  <li><code>arch.ConfigChangeSet</code> &ndash; history editací (who, when, reason, fields).</li>
+  <li><code>arch.ConsoleLoginAudit</code> &ndash; login log (success/failure).</li>
+  <li><code>arch.ConsoleOperator</code> &ndash; operátoři konzole (IsElevated = L1/L2).</li>
+  <li><code>arch.RetentionPolicy</code> &ndash; retention floor (MinRetentionDays).</li>
+  <li><code>arch.LegalHold</code> &ndash; blokace smazání.</li>
+</ul>
+
+<h3>Efektivní views (config resolution)</h3>
+<ul>
+  <li><code>arch.v_ProcessDatabaseEffective</code> &ndash; výsledná konfigurace (Process defaults + ProcessDatabase overrides).</li>
+  <li><code>arch.v_ObjectSpecDatabaseEffective</code> &ndash; výsledná objektová konfigurace.</li>
+</ul>
+
+<h3>Chybové kódy (rychlá referenční karta)</h3>
+<table>
+  <tr><th>Kód</th><th>Název</th><th>Popis</th><th>Kdo řeší</th></tr>
+  <tr><td>50200</td><td>TZ cutoff chyba</td><td>Cutoff není převeden na UTC (chybí AT TIME ZONE)</td><td>L2 &ndash; opravit CandidateSelectExpr / TimestampExpr</td></tr>
+  <tr><td>50210</td><td>Retention floor</td><td>Cutoff je příliš nedávný &ndash; pod bezpečné minimum</td><td>L2 &ndash; zvýšit RetentionDays nebo CutoffDate</td></tr>
+  <tr><td>50404</td><td>PurgeArchive role</td><td>Volán PurgeArchive bez karch_approver role</td><td>DBA</td></tr>
+  <tr><td>50405</td><td>PurgeArchive AuditLevel</td><td>PurgeArchive vyžaduje AuditLevel=ROW</td><td>DBA</td></tr>
+  <tr><td>51000</td><td>Config neplatná</td><td>Konfigurace pro běh není platná nebo aktivní</td><td>L2 &ndash; Configuration + Validation</td></tr>
+  <tr><td>51001</td><td>Runner privilege gate</td><td>Runner nemá oprávnění (časté po obnově zdrojové DB)</td><td>L2 &ndash; znovu spustit 053 + 054</td></tr>
+  <tr><td>50004</td><td>Legacy proc</td><td>Volána blokovaná legacy procedura</td><td>info / L2</td></tr>
+</table>
+
+<hr>
+
+<p><strong>Poslední aktualizace:</strong> 2026-06-26 | <strong>Verze:</strong> kArchiveManager 2.0 Admin Console | <strong>Jazyk:</strong> Czech</p>
+
+</body>
+</html>

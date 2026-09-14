@@ -1,0 +1,752 @@
+<title>kArchive Manager 2.0 — školení L1/L2</title>
+<style>
+  :root{
+    --ground:#F4F7F5; --text:#13211D; --muted:#5A6B65;
+    --accent:#0F7A63; --accent-2:#C2791A; --ink:#0C1C19;
+    --line:#D5DEDA; --panel:#FFFFFF; --soft:#EAF0EE; --danger:#B23A2E;
+    --mono:'Cascadia Code','Consolas','SFMono-Regular',monospace;
+    --sans:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+    --slideW:33.87cm; --slideH:19.05cm;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#C8D3CE;color:var(--text);font-family:var(--sans);
+       font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .deck{display:flex;flex-direction:column;align-items:center;gap:22px;padding:28px 12px}
+
+  /* ---- slide frame ---- */
+  .slide{position:relative;width:min(100%,1180px);aspect-ratio:16/9;background:var(--ground);
+         border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 34px rgba(12,28,25,.18);
+         padding:46px 56px 54px;overflow:hidden;display:flex;flex-direction:column}
+  .slide .eyebrow{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+                  color:var(--accent);margin:0 0 10px}
+  .slide h2{font-size:30px;font-weight:800;letter-spacing:-.01em;line-height:1.08;margin:0 0 18px}
+  .slide h2 .q{color:var(--accent)}
+  .slide p{margin:0 0 10px}
+  .lead{font-size:18px;color:var(--muted);max-width:62ch}
+  .foot{position:absolute;left:56px;right:56px;bottom:18px;display:flex;justify-content:space-between;
+        font-size:11px;letter-spacing:.04em;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+  .foot .tag{font-weight:700;color:var(--accent)}
+  .pageno{font-variant-numeric:tabular-nums}
+  .time{position:absolute;top:44px;right:56px;font-family:var(--mono);font-size:12px;color:var(--accent-2);
+        font-weight:700;border:1px solid var(--accent-2);border-radius:999px;padding:3px 10px}
+
+  /* ---- divider / title slides ---- */
+  .slide--ink{background:var(--ink);color:#EAF3EF;border:none}
+  .slide--ink .eyebrow{color:#7FD9C2}
+  .slide--ink h1{font-size:46px;font-weight:800;letter-spacing:-.02em;line-height:1.05;margin:0 0 14px;max-width:20ch}
+  .slide--ink h2{color:#fff}
+  .slide--ink .foot{color:#6F8780;border-top-color:#21332E}
+  .slide--ink .foot .tag{color:#7FD9C2}
+  .bignum{position:absolute;right:40px;bottom:-30px;font-size:300px;font-weight:800;line-height:1;
+          color:rgba(127,217,194,.08);letter-spacing:-.04em}
+  .titlewrap{margin-top:auto;margin-bottom:auto}
+  .kicker{font-family:var(--mono);font-size:13px;color:#7FD9C2;letter-spacing:.1em;margin-bottom:22px}
+  .subt{font-size:19px;color:#A9C2BA;max-width:48ch}
+  .badges{display:flex;gap:10px;margin-top:26px;flex-wrap:wrap}
+  .badge{font-size:12px;font-weight:700;letter-spacing:.05em;border:1px solid #2C4640;border-radius:999px;
+         padding:6px 14px;color:#CFE3DC}
+  .badge--solid{background:#7FD9C2;color:#0C1C19;border-color:#7FD9C2}
+
+  /* ---- content building blocks ---- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:26px;flex:1;min-height:0}
+  .cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  ul.clean{margin:0;padding:0;list-style:none}
+  ul.clean li{position:relative;padding-left:20px;margin-bottom:9px}
+  ul.clean li::before{content:'';position:absolute;left:0;top:.62em;width:8px;height:8px;border-radius:2px;
+                      background:var(--accent);transform:rotate(45deg)}
+  ul.clean li b{font-weight:700}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .panel h3{margin:0 0 8px;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .soft{background:var(--soft)}
+  .mono{font-family:var(--mono)}
+
+  /* callouts */
+  .call{border-left:4px solid var(--accent);background:#E7F1ED;border-radius:0 8px 8px 0;padding:12px 16px;margin:6px 0}
+  .call--warn{border-left-color:var(--accent-2);background:#FBF1E1}
+  .call--danger{border-left-color:var(--danger);background:#F8E9E7}
+  .call .lbl{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .call--warn .lbl{color:var(--accent-2)} .call--danger .lbl{color:var(--danger)}
+
+  /* stat row */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .stat .n{font-size:30px;font-weight:800;letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums}
+  .stat .n.warn{color:var(--accent-2)}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+
+  /* diagram: pipeline boxes */
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:nowrap;margin:6px 0}
+  .node{flex:1;background:var(--panel);border:1.5px solid var(--accent);border-radius:10px;padding:14px;text-align:center}
+  .node.prod{border-color:#9AA8A3;background:#fff}
+  .node.arch{border-color:var(--accent);background:#E7F1ED}
+  .node .t{font-weight:800;font-size:15px}
+  .node .s{font-size:12px;color:var(--muted);margin-top:4px}
+  .arrow{display:flex;align-items:center;justify-content:center;min-width:54px;color:var(--accent);
+         font-size:13px;font-weight:700;text-align:center;flex-direction:column;gap:2px}
+  .arrow .big{font-size:22px;line-height:1}
+  .arrow small{font-size:9.5px;color:var(--muted);max-width:60px}
+
+  /* error-code cards */
+  .codes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .code{display:grid;grid-template-columns:74px 1fr;gap:12px;background:var(--panel);border:1px solid var(--line);
+        border-left:4px solid var(--accent-2);border-radius:8px;padding:10px 12px;align-items:start}
+  .code .num{font-family:var(--mono);font-weight:800;font-size:17px;color:var(--accent-2)}
+  .code .txt{font-size:12.5px}
+  .code .txt b{display:block;margin-bottom:1px}
+  .code.crit{border-left-color:var(--danger)} .code.crit .num{color:var(--danger)}
+
+  table.t{width:100%;border-collapse:collapse;font-size:13px}
+  table.t th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+             border-bottom:2px solid var(--line);padding:7px 8px}
+  table.t td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top}
+  table.t td.k{font-family:var(--mono);font-weight:700;color:var(--accent);white-space:nowrap}
+  .tl{display:flex;align-items:center;margin:14px 0 4px;font-family:var(--mono);font-size:12px}
+  .tl .seg{height:26px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+
+  .two-up{display:grid;grid-template-columns:1fr 1fr;gap:18px;flex:1;min-height:0}
+  .chk li::before{background:var(--accent)} .x li::before{background:var(--danger)}
+  .fillin{font-family:var(--mono);color:var(--muted)}
+  .fillin::after{content:'________________'}
+
+  @media print{
+    @page{size:33.87cm 19.05cm;margin:0}
+    body{background:#fff}
+    .deck{gap:0;padding:0}
+    .slide{width:var(--slideW);height:var(--slideH);aspect-ratio:auto;border:none;border-radius:0;
+           box-shadow:none;page-break-after:always;break-after:page}
+    .slide:last-child{page-break-after:auto;break-after:auto}
+  }
+</style>
+
+<div class="deck">
+
+<!-- ===== TITLE ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap">
+    <div class="kicker">KODYS · WMS DATA ARCHIVING</div>
+    <h1>kArchive Manager 2.0</h1>
+    <div class="subt">Školení podpory L1 / L2 — jak je nástroj postavený, jak funguje, co přináší zákazníkovi a jak se chová v provozu. Potom ovládání přes Admin Console.</div>
+    <div class="badges">
+      <span class="badge badge--solid">60 minut</span>
+      <span class="badge">Architektura + logika</span>
+      <span class="badge">Provozní dopady</span>
+      <span class="badge">Ovládání Console</span>
+      <span class="badge">Chyby &amp; eskalace</span>
+    </div>
+  </div>
+  <div class="bignum">2.0</div>
+  <div class="foot"><span class="tag">kArchive Manager 2.0</span><span>Školení podpory · L1 / L2</span></div>
+</section>
+
+<!-- ===== AGENDA ===== -->
+<section class="slide">
+  <div class="eyebrow">Agenda</div>
+  <h2>Co dnes projdeme</h2>
+  <div class="cols">
+    <table class="t">
+      <tr><td class="k">01</td><td><b>Proč to existuje</b> — problém a přínosy</td><td class="mono" style="color:var(--accent-2)">6′</td></tr>
+      <tr><td class="k">02</td><td><b>Jak je to postavené</b> — architektura, datová vrstva</td><td class="mono" style="color:var(--accent-2)">10′</td></tr>
+      <tr><td class="k">03</td><td><b>Logika a mechanismy</b> — jak se data přesouvají</td><td class="mono" style="color:var(--accent-2)">14′</td></tr>
+      <tr><td class="k">04</td><td><b>Provozní dopady</b> — co hlídat</td><td class="mono" style="color:var(--accent-2)">6′</td></tr>
+    </table>
+    <table class="t">
+      <tr><td class="k">05</td><td><b>Ovládání Admin Console</b></td><td class="mono" style="color:var(--accent-2)">12′</td></tr>
+      <tr><td class="k">06</td><td><b>Chyby a první reakce</b></td><td class="mono" style="color:var(--accent-2)">6′</td></tr>
+      <tr><td class="k">07</td><td><b>Bezpečnost a role</b></td><td class="mono" style="color:var(--accent-2)">3′</td></tr>
+      <tr><td class="k">08</td><td><b>L1/L2/eskalace + hands-on</b></td><td class="mono" style="color:var(--accent-2)">3′</td></tr>
+    </table>
+  </div>
+  <div class="call"><span class="lbl">Cíl školení</span> Po hodině rozumíš, <b>jak nástroj funguje a proč je bezpečný</b>, umíš sledovat provoz v Console, reagovat na běžné chyby a víš, kdy eskalovat. Hluboká architektura není potřeba — stačí princip.</div>
+  <div class="foot"><span class="tag">Agenda</span><span class="pageno">01</span></div>
+</section>
+
+<!-- ===== 01 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 01</div><h1>Proč to existuje</h1>
+  <div class="subt">Problém, který řeší — a co z toho má zákazník.</div></div>
+  <div class="bignum">01</div>
+  <div class="foot"><span class="tag">01 · Proč</span><span class="pageno">02</span></div>
+</section>
+
+<!-- ===== 01.1 problem ===== -->
+<section class="slide">
+  <span class="time">⏱ 6′</span>
+  <div class="eyebrow">Problém</div>
+  <h2>Produkční WMS databáze rostou donekonečna</h2>
+  <div class="cols">
+    <div>
+      <ul class="clean">
+        <li>Logy, doklady, integrační fronty se <b>nikdy nemažou</b> → tabulky mají miliony až stovky milionů řádků.</li>
+        <li>Důsledek: <b>pomalejší dotazy</b>, delší zálohy, dražší úložiště, riziko provozních výpadků.</li>
+        <li>Ruční mazání je <b>nebezpečné</b> — co když smažu něco, co ještě potřebuju? A kde to pak vezmu?</li>
+      </ul>
+      <div class="call call--warn"><span class="lbl">Jádro problému</span> Stará data je potřeba <b>dostat z produkce pryč</b> — ale bezpečně, dohledatelně a bez zásahu do běžícího provozu.</div>
+    </div>
+    <div class="panel soft">
+      <h3>kArchive Manager 2.0 v jedné větě</h3>
+      <p style="font-size:17px;margin-top:6px">Automaticky a <b>bezpečně archivuje a maže stará data</b> z produkčních databází: staré řádky nejdřív zkopíruje do archivní databáze a teprve pak je z produkce smaže.</p>
+      <p class="mono" style="color:var(--accent);margin-top:14px">staré řádky → archiv → smazat z produkce</p>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">01 · Proč</span><span class="pageno">03</span></div>
+</section>
+
+<!-- ===== 01.2 benefits ===== -->
+<section class="slide">
+  <div class="eyebrow">Přínosy pro zákazníka</div>
+  <h2>Co tím zákazník získá</h2>
+  <div class="cols-3" style="flex:1;align-content:start">
+    <div class="panel"><h3>Výkon</h3><p>Štíhlá produkce = <b>rychlejší WMS</b>, kratší zálohy, nižší náklady na úložiště.</p></div>
+    <div class="panel"><h3>Nic se neztratí</h3><p>Smazané řádky jsou <b>vždy nejdřív v archivu</b> (FULL recovery + zálohy). Lze je dohledat i vrátit.</p></div>
+    <div class="panel"><h3>Auditovatelné</h3><p>O každém smazaném dokladu je <b>neměnný záznam</b> — kdo/co/kdy. Splní compliance.</p></div>
+    <div class="panel"><h3>Bezpečné z principu</h3><p>Mazání je dávkové, transakční a <b>hlídané branami</b>; výběr dat <b>nezamyká</b> produkci.</p></div>
+    <div class="panel"><h3>Univerzální</h3><p><b>Konfigurace, ne kód.</b> Nové tabulky/DB se přidají nastavením, ne programováním.</p></div>
+    <div class="panel"><h3>Pod kontrolou</h3><p>Webová <b>Admin Console</b> + plánované noční joby + reporty a odhady dopadů.</p></div>
+  </div>
+  <div class="foot"><span class="tag">01 · Proč</span><span class="pageno">04</span></div>
+</section>
+
+<!-- ===== 02 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 02</div><h1>Jak je to postavené</h1>
+  <div class="subt">Architektura a datová vrstva — high level. Stačí pochopit, co kde žije.</div></div>
+  <div class="bignum">02</div>
+  <div class="foot"><span class="tag">02 · Architektura</span><span class="pageno">05</span></div>
+</section>
+
+<!-- ===== 02.1 architecture diagram ===== -->
+<section class="slide">
+  <span class="time">⏱ 10′</span>
+  <div class="eyebrow">Architektura</div>
+  <h2>Pět stavebních bloků</h2>
+  <div class="flow">
+    <div class="node prod"><div class="t">Produkční DB</div><div class="s">zdroj (zákazník)<br>Edge, KMWEBV, …</div></div>
+    <div class="arrow"><span class="big">→</span><small>výběr<br>BEZ zámků</small></div>
+    <div class="node"><div class="t">kArchive engine</div><div class="s">řídicí DB<br>kArchiveManagerAdmin</div></div>
+    <div class="arrow"><span class="big">→</span><small>DELETE<br>+ OUTPUT</small></div>
+    <div class="node arch"><div class="t">Archiv</div><div class="s">kArchiveManagerBackups<br>(FULL recovery)</div></div>
+  </div>
+  <div class="cols" style="margin-top:14px">
+    <div class="panel"><h3>Řízení a automatizace</h3>
+      <ul class="clean">
+        <li><b>Admin Console</b> — webová aplikace (sledování, konfigurace, dohledání)</li>
+        <li><b>SQL Agent joby</b> — noční automatika (PREP → RUN → zálohy)</li>
+      </ul></div>
+    <div class="call"><span class="lbl">Klíč k zapamatování</span> Produkce, řídicí DB a archiv jsou <b>tři oddělené databáze</b>. Console a joby jen řídí tok mezi nimi — samotná data tečou na úrovni SQL Serveru.</div>
+  </div>
+  <div class="foot"><span class="tag">02 · Architektura</span><span class="pageno">06</span></div>
+</section>
+
+<!-- ===== 02.2 the two DBs ===== -->
+<section class="slide">
+  <div class="eyebrow">Datová vrstva</div>
+  <h2>Dvě databáze nástroje — co v nich je</h2>
+  <div class="two-up">
+    <div class="panel"><h3 style="color:var(--accent)">kArchiveManagerAdmin — řídicí</h3>
+      <ul class="clean">
+        <li><b>Konfigurace</b>: procesy, mapování, retence, režimy</li>
+        <li><b>Historie běhů</b>: Run / RunItem (co/kdy/kolik/stav)</li>
+        <li><b>Audit</b>: RunDocAudit (per doklad), <b>neměnný</b></li>
+        <li><b>Fronta</b>: WorkBatch (připravení kandidáti)</li>
+      </ul></div>
+    <div class="panel soft"><h3 style="color:var(--accent)">kArchiveManagerBackups — archiv</h3>
+      <ul class="clean">
+        <li><b>Kopie smazaných řádků</b> — system-of-record</li>
+        <li>Tabulky per zdrojová DB: <span class="mono">[Edge].[RF_LOG2]</span></li>
+        <li><b>FULL recovery</b> + vlastní zálohy (denně/hodinově)</li>
+        <li>⚠️ <b>nikdy nemazat</b> — je to jediná kopie smazaných dat</li>
+      </ul></div>
+  </div>
+  <div class="call"><span class="lbl">Proč Console „pamatuje" i po redeployi appky</span> Veškerý stav je v <b>databázi</b>, ne v aplikaci. Přenasazení Console (soubory na IIS) se DB nedotkne → reporty ukazují totéž. Vyresetuje to jen zásah do databáze.</div>
+  <div class="foot"><span class="tag">02 · Architektura</span><span class="pageno">07</span></div>
+</section>
+
+<!-- ===== 02.3 config-driven ===== -->
+<section class="slide">
+  <div class="eyebrow">Konfigurace, ne kód</div>
+  <h2>Jak se popisuje, co se má archivovat</h2>
+  <div class="flow">
+    <div class="node"><div class="t">Proces</div><div class="s">typ dat<br>RF_LOG2, RECEIVING…</div></div>
+    <div class="arrow"><span class="big">→</span><small>nasazen na</small></div>
+    <div class="node"><div class="t">Mapping</div><div class="s">proces × zdrojová DB<br>RF_LOG2 @ Edge</div></div>
+    <div class="arrow"><span class="big">→</span><small>obsahuje</small></div>
+    <div class="node"><div class="t">ObjectSpec</div><div class="s">konkrétní tabulky<br>+ pořadí mazání (FK)</div></div>
+  </div>
+  <div class="cols" style="margin-top:16px">
+    <ul class="clean">
+      <li>Nový zákazník = <b>nastavení</b> (názvy DB, retence, časová zóna), žádné programování.</li>
+      <li>Vše se edituje v Console (Configuration) se <b>4-eyes</b> kontrolou a důvodem změny.</li>
+    </ul>
+    <div class="call"><span class="lbl">Pro podporu</span> Když se ptáš „co všechno se archivuje?", odpověď je v <b>Configuration → procesy a mapování</b>. Tohle je doména spíš L2 / administrátora.</div>
+  </div>
+  <div class="foot"><span class="tag">02 · Architektura</span><span class="pageno">08</span></div>
+</section>
+
+<!-- ===== 03 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 03</div><h1>Logika a hlavní mechanismy</h1>
+  <div class="subt">Jak přesně se data přesouvají — a proč je to bezpečné.</div></div>
+  <div class="bignum">03</div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">09</span></div>
+</section>
+
+<!-- ===== 03.1 core flow ===== -->
+<section class="slide">
+  <span class="time">⏱ 14′</span>
+  <div class="eyebrow">Hlavní mechanismus</div>
+  <h2>Archivovat <span class="q">a teprve pak</span> mazat — atomicky</h2>
+  <div class="flow">
+    <div class="node prod"><div class="t">1 · Výběr kandidátů</div><div class="s">řádky za retenčním cutoffem<br><b>NOLOCK</b> = bez zámků</div></div>
+    <div class="arrow"><span class="big">→</span></div>
+    <div class="node arch"><div class="t">2 · DELETE … OUTPUT</div><div class="s">smazání + záloha<br>v JEDNÉ transakci</div></div>
+    <div class="arrow"><span class="big">→</span></div>
+    <div class="node"><div class="t">3 · Kontrola</div><div class="s">archivováno == smazáno<br><b>Divergence = 0</b></div></div>
+  </div>
+  <div class="cols" style="margin-top:14px">
+    <ul class="clean">
+      <li>Mazání je <b>jeden příkaz</b> <span class="mono">DELETE … OUTPUT INTO archiv</span> — řádek se ve stejné transakci zazálohuje i smaže.</li>
+      <li>Nikdy tedy nenastane stav „smazáno, ale nezálohováno". U režimu 1 platí <b>archivováno == smazáno</b>.</li>
+    </ul>
+    <div class="call"><span class="lbl">Věta pro zákazníka</span> „Mode 1 → Divergence = 0. Když by se nemělo co bezpečně smazat, nesmaže se nic."</div>
+  </div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">10</span></div>
+</section>
+
+<!-- ===== 03.2 retention/cutoff ===== -->
+<section class="slide">
+  <div class="eyebrow">Retence a cutoff</div>
+  <h2>Dotkne se jen dat starších než hranice</h2>
+  <div class="tl">
+    <div class="seg" style="background:#9AA8A3;flex:2">staré / způsobilé k archivaci</div>
+    <div class="seg" style="background:var(--accent-2);flex:0 0 130px">cutoff (hranice)</div>
+    <div class="seg" style="background:var(--accent);flex:3">mladé / NEDOTČENO</div>
+  </div>
+  <div class="cols" style="margin-top:10px">
+    <ul class="clean">
+      <li><b>Retence / cutoff</b> = stáří, za kterým je řádek „způsobilý". Mladší data se <b>nikdy</b> nedotknou.</li>
+      <li><b>Retenční podlaha (brána 50210)</b> — nikdo nemůže nastavit retenci pod bezpečné minimum.</li>
+      <li><b>Legal hold</b> — vyjmenované doklady se nikdy nearchivují (právní pozdržení).</li>
+    </ul>
+    <div class="call call--warn"><span class="lbl">Pozor — časová zóna</span> Data porovnáváme v UTC. Špatně nastavená zóna zdroje = brána <span class="mono">50200</span>. Proto se cutoff počítá konzistentně přes <span class="mono">AT TIME ZONE</span>.</div>
+  </div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">11</span></div>
+</section>
+
+<!-- ===== 03.3 strategies + modes ===== -->
+<section class="slide">
+  <div class="eyebrow">Strategie &amp; režimy</div>
+  <h2>Dva způsoby výběru, tři režimy</h2>
+  <div class="cols">
+    <div class="panel"><h3>Strategie výběru</h3>
+      <ul class="clean">
+        <li><b>ANCHOR</b> — doklad + jeho řádky jako celek (RECEIVING, SHIPPING). Dvoufázově: PREP připraví, RUN spustí.</li>
+        <li><b>TIMESTAMP</b> — záznamy podle času (logy, RF_LOG2). Jednofázově podle klíče.</li>
+      </ul></div>
+    <div class="panel soft"><h3>Režim (Mode)</h3>
+      <ul class="clean">
+        <li><b>1 — archivovat + smazat</b> (běžné). Divergence = 0.</li>
+        <li><b>0 — jen smazat</b> (vyžaduje explicitní povolení).</li>
+        <li><b>2 — jen kopírovat</b> (idempotentní záloha, bez mazání).</li>
+      </ul></div>
+  </div>
+  <div class="call"><span class="lbl">Pro podporu</span> Nemusíš znát detail ANCHOR vs TIMESTAMP — stačí „dva způsoby výběru podle typu dat". Důležité je vědět, že <b>Mode 0/2 se chovají jinak</b> (Mode 2 nemaže → Divergence ≠ 0 je tam normální).</div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">12</span></div>
+</section>
+
+<!-- ===== 03.4 lock-safety (headline) ===== -->
+<section class="slide">
+  <div class="eyebrow">Klíčový provozní princip</div>
+  <h2>Výběr dat <span class="q">nezamyká</span> produkci</h2>
+  <div class="two-up">
+    <div class="panel"><h3>PREP — výběr kandidátů</h3>
+      <p>Čte zdroj přes <b class="mono">NOLOCK</b> (read uncommitted) → bere <b>nula datových zámků</b>. Běží kdykoli, i mimo okno.</p>
+      <p class="mono" style="color:var(--accent);margin-top:8px">drží jen Sch-S → nikdy neblokuje OLTP</p></div>
+    <div class="panel"><h3>RUN — mazání (DELETE)</h3>
+      <p>Bere zámky jen na mazané řádky, v <b>dohodnutém nočním okně</b>, v <b>malých dávkách</b> (&lt; 5000 řádků → bez eskalace na zámek tabulky).</p>
+      <p class="mono" style="color:var(--accent-2);margin-top:8px">u multi-index tabulek: LOCK_ESCALATION = DISABLE</p></div>
+  </div>
+  <div class="call"><span class="lbl">Proč to zákazníka zajímá</span> Archivace <b>neblokuje běžící WMS</b>. Bezpečné je to z principu — výběr nezamyká, mazání je drobné a v okně. Žádné indexy se ve zdroji nezakládají.</div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">13</span></div>
+</section>
+
+<!-- ===== 03.5 audit ===== -->
+<section class="slide">
+  <div class="eyebrow">Auditovatelnost</div>
+  <h2>O každém smazaném dokladu je neměnný záznam</h2>
+  <div class="cols">
+    <ul class="clean">
+      <li><b>RunDocAudit</b> — per doklad: klíč, kdy vytvořen, kdy smazán, zda archivován.</li>
+      <li><b>RunItemObject</b> — počty per zdrojová tabulka; <b>Run/RunItem</b> — kdo/kdy/stav běhu.</li>
+      <li>Audit je <b>neměnný</b> (DENY UPDATE/DELETE) — nelze ho zpětně přepsat ani smazat.</li>
+      <li>Úroveň auditu: NONE / BATCH / ROW (kompromis výkon × stopa).</li>
+    </ul>
+    <div class="call"><span class="lbl">Typický dotaz</span> „Byl tenhle doklad smazán a kde je?" → <b>Document lookup</b> v Console (čte z auditu + archivu). Žádné šťourání v produkci.</div>
+  </div>
+  <div class="foot"><span class="tag">03 · Mechanismy</span><span class="pageno">14</span></div>
+</section>
+
+<!-- ===== 04 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 04</div><h1>Provozní dopady</h1>
+  <div class="subt">Co je bezpečné, a co je potřeba správně nasadit.</div></div>
+  <div class="bignum">04</div>
+  <div class="foot"><span class="tag">04 · Provoz</span><span class="pageno">15</span></div>
+</section>
+
+<!-- ===== 04.1 impacts ===== -->
+<section class="slide">
+  <span class="time">⏱ 6′</span>
+  <div class="eyebrow">Dopady na provoz systému</div>
+  <h2>Co hlídat — a co je naopak bez rizika</h2>
+  <div class="two-up">
+    <div><div class="panel" style="border-left:4px solid var(--accent)"><h3 style="color:var(--accent)">Bezpečné (z principu)</h3>
+      <ul class="clean chk">
+        <li>Výběr kandidátů — <b>0 zámků</b> na produkci</li>
+        <li>Mazání v <b>malých dávkách</b> v nočním okně</li>
+        <li>Žádné indexy/změny schématu ve zdroji</li>
+      </ul></div></div>
+    <div><div class="panel" style="border-left:4px solid var(--accent-2)"><h3 style="color:var(--accent-2)">Správně nasadit / hlídat</h3>
+      <ul class="clean">
+        <li><b>Log zdroje</b> (FULL recovery): velké mazání generuje log → musí stíhat log-backupy</li>
+        <li><b>Archivní log</b>: pre-size + hodinový log-backup job</li>
+        <li><b>tempdb</b> na instanci, kde běží archivace</li>
+        <li><b>RUN okno</b> = mimo špičku WMS</li>
+      </ul></div></div>
+  </div>
+  <div class="stats" style="margin-top:14px">
+    <div class="stat"><div class="n">0</div><div class="l">zámků na produkci<br>při výběru</div></div>
+    <div class="stat"><div class="n">~29 min</div><div class="l">5 mil. řádků<br>lock-free</div></div>
+    <div class="stat"><div class="n">≤ 4000</div><div class="l">řádků v dávce<br>(bez eskalace)</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">Divergence<br>(Mode 1)</div></div>
+  </div>
+  <div class="foot"><span class="tag">04 · Provoz</span><span class="pageno">16</span></div>
+</section>
+
+<!-- ===== 05 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 05</div><h1>Ovládání Admin Console</h1>
+  <div class="subt">Webová aplikace, přes kterou podpora sleduje a obsluhuje nástroj.</div></div>
+  <div class="bignum">05</div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">17</span></div>
+</section>
+
+<!-- ===== 05.1 console overview ===== -->
+<section class="slide">
+  <span class="time">⏱ 12′</span>
+  <div class="eyebrow">Orientace</div>
+  <h2>Levá lišta — k čemu která sekce</h2>
+  <div class="cols">
+    <table class="t">
+      <tr><th>Sekce</th><th>K čemu</th></tr>
+      <tr><td class="k">Dashboard</td><td>Stav na první pohled — <b>sem L1 kouká první</b></td></tr>
+      <tr><td class="k">Runs</td><td>Historie běhů: stav, kolik archivováno/smazáno</td></tr>
+      <tr><td class="k">Document&nbsp;lookup</td><td>„Byl doklad zarchivován?" → dohledání</td></tr>
+      <tr><td class="k">Analysis &amp; Est.</td><td>Odhady příští dávky + grafy zdroj/archiv</td></tr>
+      <tr><td class="k">Configuration</td><td>Procesy, retence, joby, operátoři <b>(L2)</b></td></tr>
+      <tr><td class="k">Validation</td><td>Kontrola konfigurace + chybějící indexy</td></tr>
+      <tr><td class="k">Go-live</td><td>Finální kontrola před spuštěním</td></tr>
+    </table>
+    <div>
+      <div class="panel"><h3>Přístup</h3>
+        <ul class="clean">
+          <li><b>Čtení</b> — volné (Dashboard, Runs, lookup)</li>
+          <li><b>Změny</b> — po odemčení (operátor + heslo / Windows účet) + důvod změny</li>
+          <li><b>Elevated</b> — restore do produkce = vyšší oprávnění</li>
+        </ul></div>
+      <div class="call"><span class="lbl">Pravidlo</span> L1 typicky <b>Dashboard + Runs + Document lookup</b>. Configuration je doména L2 / administrátora.</div>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">18</span></div>
+</section>
+
+<!-- ===== 05.2 dashboard signals ===== -->
+<section class="slide">
+  <div class="eyebrow">Dashboard</div>
+  <h2>Operational signals — co čte L1 první</h2>
+  <div class="cols-3" style="align-content:start">
+    <div class="panel"><h3>Data balance</h3><p>Rozdíl zdroj vs archiv. „Review" = je co archivovat.</p></div>
+    <div class="panel"><h3>Run health</h3><p><b>Zelená OK</b> / červená = byl neúspěšný běh → jdi do Runs.</p></div>
+    <div class="panel"><h3>Prep / run queue</h3><p>Čekající připravené dávky (WorkBatch).</p></div>
+    <div class="panel"><h3>Process coverage</h3><p>Kolik procesů je zapnutých (např. 5/7).</p></div>
+    <div class="panel"><h3>Object availability</h3><p>Chybějící zdrojové/archivní objekty.</p></div>
+    <div class="panel"><h3>Config validation</h3><p>Počet varování konfigurace (WARN).</p></div>
+  </div>
+  <div class="call"><span class="lbl">Čísla nahoře</span> Active processes · Source rows · <b>Archived rows</b> (= součet všech archivních tabulek) · Recent non-OK runs. „Archived rows" sedí přesně se součtem archivu — Console nic neztrácí.</div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">19</span></div>
+</section>
+
+<!-- ===== 05.3 common L1 tasks ===== -->
+<section class="slide">
+  <div class="eyebrow">Běžné úkoly L1</div>
+  <h2>Pět nejčastějších situací</h2>
+  <table class="t">
+    <tr><th>Dotaz / situace</th><th>Kde / jak</th></tr>
+    <tr><td>„Je systém v pořádku?"</td><td><b>Dashboard</b> → zelené signály; červený Run health → Runs</td></tr>
+    <tr><td>„Kde je můj doklad / byl smazán?"</td><td><b>Document lookup</b> → zadat klíč → archiv + čas smazání</td></tr>
+    <tr><td>„Proč ubyla data v tabulce?"</td><td><b>Runs</b> → poslední běh → archivováno/smazáno, Divergence = 0</td></tr>
+    <tr><td>„Kolik se bude mazat příště?"</td><td><b>Analysis &amp; Estimates</b> (řádky / MB)</td></tr>
+    <tr><td>„Potřebuju doklad zpět"</td><td><b>Restore</b> = vrácení z archivu → <b>eskalace na L2</b> (elevated)</td></tr>
+  </table>
+  <div class="call call--danger"><span class="lbl">Nikdy</span> Neraď zákazníkovi mazat/měnit data ručně v DB. Vše jde přes Console nebo eskalaci.</div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">20</span></div>
+</section>
+
+<!-- ===== 05.4 Analysis & Estimates ===== -->
+<section class="slide">
+  <div class="eyebrow">Console · Analýza</div>
+  <h2>Analysis &amp; Estimates — <span class="q">všechny</span> procesy, scroll, odhady</h2>
+  <div class="cols">
+    <div class="panel">
+      <h3>Co grafy ukazují</h3>
+      <ul class="clean">
+        <li><b>Všechny procesy a tabulky</b> (dřív skrytý RF/L filtr je pryč) — Source vs Archived, denní přenosy, podle cutoffu.</li>
+        <li>Dlouhé seznamy se <b>scrollují uvnitř panelu</b> (nestahují stránku donekonečna).</li>
+        <li>KPI dlaždice: mapped tables, source/archived rows, runs.</li>
+      </ul>
+    </div>
+    <div class="panel soft">
+      <h3>Odhady další dávky (opt-in)</h3>
+      <ul class="clean">
+        <li>Panel <b>„Odhady další dávky (MB)"</b> je <b>defaultně vypnutý</b> — počítá se až po zaškrtnutí, takže přehled nebrzdí.</li>
+        <li>Ukáže, kolik řádků/MB by zpracoval příští běh (plán + rezerva).</li>
+        <li>L1 čte: „kolik se bude příště mazat".</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">21</span></div>
+</section>
+
+<!-- ===== 05.5 Configuration: layering ===== -->
+<section class="slide">
+  <div class="eyebrow">Console · Konfigurace</div>
+  <h2>Process = <span class="q">výchozí</span>, Mapping = <span class="q">override</span></h2>
+  <p class="lead">Hodnota nastavená na mapování (Source→Archive DB) <b>přebíjí</b> stejnou hodnotu na procesu. Runtime bere <span class="mono">COALESCE(mapping, process)</span>.</p>
+  <div class="cols">
+    <div class="panel">
+      <h3>Co je nově vidět</h3>
+      <ul class="clean">
+        <li>Sloupec <b>„Overrides"</b> v Database mappings — vypíše, která pole mapping přebíjí (např. <span class="mono">Mode, Audit, BatchRows</span>).</li>
+        <li><b>Badge</b> u zdroje: amber = přebito na mappingu, neutrální = zděděno z procesu.</li>
+        <li>Editor procesu varuje: <i>„toto jsou výchozí hodnoty; mapping je může přebít".</i></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Past, které se vyhnout</h3>
+      <ul class="clean">
+        <li>Změna na <b>procesu</b> se neprojeví, pokud ji mapping přebíjí.</li>
+        <li>Chceš-li změnit reálně použitou hodnotu → <b>edituj mapování</b> (viz Overrides).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">22</span></div>
+</section>
+
+<!-- ===== 05.6 Configuration: cutoff/audit/modes ===== -->
+<section class="slide">
+  <div class="eyebrow">Console · Konfigurace</div>
+  <h2>Cutoff (UTC + lokální náhled), audit, režimy</h2>
+  <div class="cols-3">
+    <div class="panel">
+      <h3>Cutoff</h3>
+      <ul class="clean">
+        <li><b>Relativní retence</b> (dní) — bez TZ nejasností (doporučeno).</li>
+        <li><b>Pevné datum</b> = <b>00:00 UTC</b>; editor živě ukáže <b>lokální hranici</b> (zima +1 h, léto +2 h).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Audit</h3>
+      <ul class="clean">
+        <li>NONE / BATCH / OBJECT / <b>ROW</b> (per doklad).</li>
+        <li>Plný ROW audit stojí <b>~21 %</b> výkonu — volitelně per mapping.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Režimy</h3>
+      <ul class="clean">
+        <li><b>1</b> archiv+smaz · <b>0</b> jen smaz · <b>2</b> jen kopie</li>
+        <li>Copy-only je <b>idempotentní</b> (2. běh nic nezduplikuje).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="call"><span class="lbl">Tip</span> Velikost archivu je hlavní faktor rychlosti — viz <span class="mono">archive-performance-tuning.md</span> (parking indexů, dávkování, partitioning).</div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">23</span></div>
+</section>
+
+<!-- ===== 05.7 Security/access in console ===== -->
+<section class="slide">
+  <div class="eyebrow">Console · Přístup</div>
+  <h2>Kdo smí editovat — a kdo se naposledy přihlásil</h2>
+  <div class="cols">
+    <div class="panel">
+      <h3>Odemčení editace</h3>
+      <ul class="clean">
+        <li>Vpravo nahoře <b>Operator + Password → Unlock</b>; přehledy jsou i bez přihlášení.</li>
+        <li>Restore a stop běhu vyžadují <b>elevovaného</b> operátora.</li>
+      </ul>
+    </div>
+    <div class="panel soft">
+      <h3>Nové panely v Configuration</h3>
+      <ul class="clean">
+        <li><b>Přístup k editaci</b> — Windows/AD účty, DB operátoři, stav sdíleného hesla (read-only audit).</li>
+        <li><b>Poslední přihlášení</b> — kdo a kdy odemkl editaci (i neúspěšné pokusy, <span class="mono">arch.ConsoleLoginAudit</span>).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">05 · Console</span><span class="pageno">24</span></div>
+</section>
+
+<!-- ===== 05.8 Proven guarantees ===== -->
+<section class="slide">
+  <div class="eyebrow">Proč tomu věřit</div>
+  <h2>Provozní záruky — <span class="q">ověřené testy</span></h2>
+  <div class="cols">
+    <div class="panel">
+      <h3>Konzistence dat</h3>
+      <ul class="clean">
+        <li><b>Divergence = 0</b> — smazáno == archivováno (atomická dávka), ověřeno na ~5 M řádcích.</li>
+        <li><b>Crash uprostřed běhu</b> nic neztratí ani nezduplikuje (rozdělaná dávka se rollbackne); <span class="mono">RecoverStaleRuns</span> uklidí, zbytek je resumovatelný.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Bezpečnost provozu</h3>
+      <ul class="clean">
+        <li><b>Výběr nezamyká produkci</b> (NOLOCK, 0 eskalací); žádné indexy ve zdroji.</li>
+        <li><b>Souběh</b>: applock serializuje dva běhy (žádné dvojí archivování).</li>
+        <li><b>Retenční podlaha</b> (50210) a <b>legal-hold</b> brání smazání chráněných dat.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">Záruky</span><span class="pageno">25</span></div>
+</section>
+
+<!-- ===== 06 DIVIDER ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 06</div><h1>Chyby a první reakce</h1>
+  <div class="subt">Co znamenají chybové kódy z logu jobu a co s nimi.</div></div>
+  <div class="bignum">06</div>
+  <div class="foot"><span class="tag">06 · Chyby</span><span class="pageno">26</span></div>
+</section>
+
+<!-- ===== 06.1 error codes ===== -->
+<section class="slide">
+  <span class="time">⏱ 6′</span>
+  <div class="eyebrow">Chybové kódy — první reakce</div>
+  <h2>Co uvidíš v historii jobu</h2>
+  <div class="codes">
+    <div class="code crit"><div class="num">51001</div><div class="txt"><b>Runner nemá oprávnění</b>(běží jako sysadmin/Agent). <b>Časté po obnově/redeployi DB!</b> → L2: 053+054 (+ MULTI_USER).</div></div>
+    <div class="code"><div class="num">51000</div><div class="txt"><b>Konfigurace není platná</b> (např. chybí zdrojová DB). → L2: Validation / Configuration.</div></div>
+    <div class="code"><div class="num">50200</div><div class="txt"><b>Časová zóna</b> není správně. → L2: ověřit TZ procesu.</div></div>
+    <div class="code"><div class="num">50210</div><div class="txt"><b>Retence pod minimum</b> — odmítnuto správně (retenční podlaha).</div></div>
+    <div class="code"><div class="num">50115/116</div><div class="txt"><b>Klíč není unikátní / souběh</b> — dva běhy najednou nebo špatný klíč.</div></div>
+    <div class="code"><div class="num">50400</div><div class="txt"><b>Nebezpečný SQL výraz</b> v konfiguraci (safe-expr brána).</div></div>
+    <div class="code"><div class="num">50223</div><div class="txt"><b>Copy-only bez PK</b> — tabulka potřebuje primární klíč.</div></div>
+    <div class="code"><div class="num">50500+</div><div class="txt"><b>Chyba odhadu</b> (Estimates) — většinou neškodné, zkusit znovu.</div></div>
+  </div>
+  <div class="foot"><span class="tag">06 · Chyby</span><span class="pageno">27</span></div>
+</section>
+
+<!-- ===== 06.2 #1 incident ===== -->
+<section class="slide">
+  <div class="eyebrow">Incident č. 1 — musíš znát</div>
+  <h2>Po obnově / redeployi DB padají joby na <span class="mono q">51001</span></h2>
+  <div class="cols">
+    <div>
+      <p><b>Co se stalo:</b> obnova zdrojové/archivní DB nebo přenasazení bundlu <b>smaže runner granty</b> a vrátí vlastníka jobu na sysadmina → běh jede pod Agent účtem → brána T-33 ho odmítne.</p>
+      <ul class="clean">
+        <li>Příznak v logu: <span class="mono">Executed as user: NT SERVICE\SQLAgent$… (Error 51001)</span></li>
+        <li>Často i <span class="mono">51000</span> (re-seed zapnul mapping na DB, která byla dropnutá).</li>
+      </ul>
+    </div>
+    <div class="call call--warn"><span class="lbl">Fix (L2)</span>
+      <ol style="margin:6px 0 0 18px;padding:0">
+        <li>znovu spustit <span class="mono">053</span> + <span class="mono">054</span> (granty + přeovnění jobů na runner účet)</li>
+        <li>případně <span class="mono">SET MULTI_USER</span> na obnovené DB</li>
+        <li>sladit zapnuté mappingy s reálně existujícími DB</li>
+      </ol>
+    </div>
+  </div>
+  <div class="foot"><span class="tag">06 · Chyby</span><span class="pageno">28</span></div>
+</section>
+
+<!-- ===== 07 DIVIDER + content combined ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap"><div class="eyebrow">Sekce 07</div><h1>Bezpečnost a role</h1>
+  <div class="subt">Proč nikdo nemůže nic „omylem" smazat.</div></div>
+  <div class="bignum">07</div>
+  <div class="foot"><span class="tag">07 · Bezpečnost</span><span class="pageno">29</span></div>
+</section>
+
+<section class="slide">
+  <span class="time">⏱ 3′</span>
+  <div class="eyebrow">Bezpečnostní model</div>
+  <h2>Vrstvy ochrany</h2>
+  <div class="cols-3" style="align-content:start">
+    <div class="panel"><h3>Role (RBAC)</h3><p>viewer / operator / config_admin / approver / runtime — každý vidí a smí jen své.</p></div>
+    <div class="panel"><h3>Least-priv runner</h3><p>Noční joby běží pod <b>non-sysadmin</b> účtem s minimem práv (brána 51001 sysadmina odmítne).</p></div>
+    <div class="panel"><h3>Neměnný audit</h3><p>DENY UPDATE/DELETE — stopu smazání nelze přepsat.</p></div>
+    <div class="panel"><h3>Elevated tier</h3><p><b>Restore do produkce</b> vyžaduje vyšší (jmenovité) oprávnění; sdílené heslo nikdy.</p></div>
+    <div class="panel"><h3>4-eyes + důvod</h3><p>Každá změna konfigurace = důvod + audit (kdo/kdy/co).</p></div>
+    <div class="panel"><h3>Brány při běhu</h3><p>TZ (50200), retence (50210), safe-expr (50400), souběh (50116).</p></div>
+  </div>
+  <div class="foot"><span class="tag">07 · Bezpečnost</span><span class="pageno">30</span></div>
+</section>
+
+<!-- ===== 08 escalation + hands-on ===== -->
+<section class="slide">
+  <span class="time">⏱ 3′</span>
+  <div class="eyebrow">Hranice odpovědnosti</div>
+  <h2>L1 vs L2 vs eskalace</h2>
+  <table class="t">
+    <tr><th>Úroveň</th><th>Zvládá</th></tr>
+    <tr><td class="k">L1</td><td>Sledování (Dashboard/Runs), dohledání dokladu, vysvětlení stavu, sběr info k incidentu</td></tr>
+    <tr><td class="k">L2</td><td>Oprava jobů (51001 → 053/054), validace konfigurace, plánování jobů, restore (elevated), čtení auditu, zálohy archivu</td></tr>
+    <tr><td class="k">Engineering</td><td>Změna chování runneru, výkonové ladění, schema/upgrade, podezření na ztrátu dat</td></tr>
+  </table>
+  <div class="call call--danger"><span class="lbl">Okamžitá eskalace</span> Nejasná ztráta dat nebo <b>Divergence ≠ 0</b> (u Mode 1) = ihned engineering. Ruční zásah do produkční DB = NIKDY.</div>
+  <div class="foot"><span class="tag">08 · Eskalace</span><span class="pageno">31</span></div>
+</section>
+
+<!-- ===== hands-on ===== -->
+<section class="slide">
+  <div class="eyebrow">Hands-on / ověření</div>
+  <h2>Vyzkoušej si v Console</h2>
+  <div class="cols">
+    <ol style="margin:0;padding-left:20px">
+      <li style="margin-bottom:8px">Na <b>Dashboardu</b> najdi počet aktivních procesů a zda byl poslední běh OK.</li>
+      <li style="margin-bottom:8px">V <b>Runs</b> přečti u posledního RF_LOG2: archivováno / smazáno / Divergence.</li>
+      <li style="margin-bottom:8px">V <b>Document lookup</b> dohledej konkrétní doklad.</li>
+      <li style="margin-bottom:8px">V <b>Analysis &amp; Estimates</b> zjisti odhad příští dávky.</li>
+    </ol>
+    <div class="panel soft"><h3>Kvíz</h3>
+      <ul class="clean">
+        <li>Co znamená <span class="mono">51001</span> a co uděláš jako L1?</li>
+        <li>Proč výběr kandidátů neblokuje produkci?</li>
+        <li>Kdy eskaluješ na engineering?</li>
+        <li>Co znamená Divergence = 0?</li>
+      </ul></div>
+  </div>
+  <div class="foot"><span class="tag">08 · Hands-on</span><span class="pageno">32</span></div>
+</section>
+
+<!-- ===== CLOSING ===== -->
+<section class="slide slide--ink">
+  <div class="titlewrap">
+    <div class="eyebrow">Shrnutí</div>
+    <h1>Co si odnést</h1>
+    <ul class="clean" style="font-size:18px;max-width:50ch;margin-top:6px">
+      <li>Stav žije v <b>databázi</b> (Admin + Backups), aplikace je jen okno.</li>
+      <li>Archivuje se <b>atomicky</b> (DELETE…OUTPUT), Divergence = 0, výběr <b>nezamyká</b> produkci.</li>
+      <li>L1 sleduje a dohledává; L2 opravuje joby (51001) a dělá restore; data-loss = eskalace.</li>
+    </ul>
+  </div>
+  <div class="panel" style="background:#11302A;border-color:#21332E;color:#CFE3DC;max-width:560px">
+    <h3 style="color:#7FD9C2">Klíčová fakta (doplnit pro zákazníka)</h3>
+    <p style="margin:4px 0">SQL instance: <span class="fillin"></span></p>
+    <p style="margin:4px 0">Zdrojové DB: <span class="fillin"></span></p>
+    <p style="margin:4px 0">Console URL: <span class="fillin"></span> · Okno PREP/RUN: <span class="fillin"></span></p>
+    <p style="margin:4px 0">Kontakt L2 / engineering: <span class="fillin"></span></p>
+  </div>
+  <div class="foot"><span class="tag">kArchive Manager 2.0</span><span>Detaily: User &amp; Admin manuál · customer-deploy-guide · training-l1-l2-support</span></div>
+</section>
+
+</div>

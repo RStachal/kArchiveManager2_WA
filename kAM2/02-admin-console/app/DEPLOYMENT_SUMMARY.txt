@@ -1,0 +1,25 @@
+﻿kAM Admin Console deployment summary
+Generated: 2026-07-14 09:28:47 UTC
+
+Publish path: C:\Users\stachal\WMSArchiveManager\legacy\ArchiveManager1.0\admin-console\publish\kAM-admin-console
+IIS deploy path: 
+IIS app pool: kAM Admin Console
+
+Required IIS/app settings:
+- ConnectionStrings__ArchiveManagerAdmin
+- AdminConsole__EditPasswordSha256
+
+Verification URLs:
+- http://localhost:8089/health
+- http://localhost:8089/api/readiness
+- http://localhost:8089/
+
+Required SQL deployment/check scripts:
+- legacy/ArchiveManager1.0/deploy/v2/classic-ssms/20_update_frontend_read_api.sql through 30_frontend_api_readiness_check.sql
+- legacy/ArchiveManager1.0/deploy/v2/classic-ssms/32_update_frontend_iis_principal_permissions.sql
+- legacy/ArchiveManager1.0/deploy/v2/classic-ssms/33_update_frontend_concurrency_metadata.sql
+- legacy/ArchiveManager1.0/deploy/v2/smoke-tests/28_frontend_api_readiness_smoke.sql
+- legacy/ArchiveManager1.0/deploy/v2/smoke-tests/30_frontend_iis_principal_permissions_smoke.sql
+
+Customer runbook:
+- legacy/ArchiveManager1.0/docs/admin-console-customer-deploy-runbook.md

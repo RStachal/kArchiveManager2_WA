@@ -235,8 +235,9 @@ WORKBATCH 106    PAUSE_FOR_RETRY   No progress for 1 min, 45300 keys still pendi
 The counts matched exactly and it still refused to call the run successful. That
 sentence — *success is never inferred* — is the one to read aloud.
 
-In production the job runs every 30 minutes. For a demo, run the procedure by hand
-with `@StaleAfterMinutes = 0` rather than waiting.
+In production the job looks every 15 minutes for runs silent for 30 - two different
+numbers, on purpose. For a demo, call the procedure by hand with
+`@StaleAfterMinutes = 0` rather than waiting.
 
 ### 6. Prove only the configured rows were taken
 

@@ -15,11 +15,46 @@ runbook — eight phases with a stop condition on each, plus 7b (reporting) and 
 script, the measured numbers, and the four places a live walkthrough goes wrong —
 including a job that fails one second after it starts unless `55` has been run.
 
-**The Admin Console** (the web UI, an IIS application) ships in the customer
-handover package, not here — but it is deployed and verified on this server at
-`http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the six
-corrections it needed before it would run, three of them permission gaps the
+**The Admin Console** (the web UI, an IIS application) is in
+[`kAM2/02-admin-console/`](kAM2/02-admin-console/), deployed and verified on this
+server at `http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the
+six corrections it needed before it would run, three of them permission gaps the
 shipped scripts do not close, two of which fail silently.
+
+---
+
+## What is in this repository
+
+Two layers, and it matters which one you are looking at.
+
+```
+kAM2/                       THE PRODUCT - the vendor handover, complete
+  01-database/              deploy bundle, source objects, operational add-ons,
+                            manual tests, performance tests
+  02-admin-console/         the published ASP.NET Core app (net10.0) + sample config
+  03-docs/                  23 documents, incl. the admin manual
+  04-runbooks/              7 runbooks, incl. customer-deploy and console-on-IIS
+  05-training/              L1-L2 training material
+
+README.md DEPLOYMENT.md     THIS DEPLOYMENT - the Warehouse Advantage configuration,
+ADMIN-CONSOLE.md            what was corrected, and what was measured
+PRESENTATION.md
+sql/                        the six document sets, their seeds, tests and verification
+reports/                    the SSRS dashboard, and why it does not fit as shipped
+```
+
+`kAM2/` is the product as the vendor shipped it, with **one deliberate change**:
+`02-admin-console/app/KArchiveManager.AdminConsole.Api.deps.json` carries the native
+`Microsoft.Data.SqlClient.SNI.dll` asset declaration. Without it the console cannot
+open a SQL connection under IIS at all — see correction 1 in
+[ADMIN-CONSOLE.md](ADMIN-CONSOLE.md). The file here is byte-identical to the one
+running on this server.
+
+Everything outside `kAM2/` is this deployment: the configuration, the evidence, and
+the defects found while proving it. Where the two disagree about product deployment,
+the vendor runbooks win; where they disagree about the six WA document sets, this
+package wins. The table at the end of [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) says
+which is authoritative where.
 
 ---
 
@@ -591,7 +626,8 @@ Size the first production run from a measurement, not from this README.
 | `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
 | `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
 | `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |
-| `55_fix_prep_job_owner.sql` | opt-in | Re-owns `PREP CONFIGURED` to the runner login. Without it the PREP job **fails every time it is started** — it carries the runner privilege gate but `054` re-owns only `RUN CONFIGURED`, so the gate evaluates a sysadmin and refuses. Evaluates the gate as the runner first |
+| `55_fix_prep_job_owner.sql` | opt-in | Re-owns `PREP CONFIGURED` to the runner login. Without it the PREP job **fails every time it is started** — it carries the runner privilege gate but `054` re-owns only `RUN CONFIGURED`, so the gate evaluates a sysadmin and refuses. Evaluates the gate as the runner first. Use on an **existing** instance |
+| `56_agent_jobs.sql` | opt-in | All **five** Agent jobs in one script — PREP, RUN, RECOVER STALE RUNS and the two archive backups — with the ownership, schedules and step text this deployment was tested with, and both runner jobs owned correctly from the outset. Use when **building** an instance; it replaces the job-creating parts of `028`/`036`/`048`/`054` rather than supplementing them |
 | `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches). Always restores the performance-test baseline. Covers all 21 configured tables — the PO family and the two children added by `26`/`27` were missing until 2026-09-14 |
 
 ---

@@ -1,0 +1,736 @@
+﻿<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name=ProgId content=Word.Document>
+<meta name=Generator content="kArchiveManager">
+<title>kArchiveManager 2.0 - User manual</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>
+@page { size: A4; margin: 2cm; }
+body { font-family: 'Calibri','Segoe UI',sans-serif; font-size: 11pt; line-height: 1.4; color: #1a1a1a; }
+h1 { font-family: 'Calibri Light','Segoe UI',sans-serif; color: #1f3864; font-size: 22pt; border-bottom: 2px solid #1f3864; padding-bottom: 4px; }
+h2 { font-family: 'Calibri Light','Segoe UI',sans-serif; color: #1f3864; font-size: 16pt; margin-top: 18pt; }
+h3 { color: #2e5496; font-size: 13pt; }
+h4 { color: #2e5496; font-size: 11pt; }
+code { font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; background: #f2f2f2; padding: 0 3px; }
+pre { font-family: 'Consolas','Courier New',monospace; font-size: 9pt; background: #f6f8fa; border: 1px solid #ddd; padding: 8px; white-space: pre-wrap; word-wrap: break-word; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; margin: 8px 0; }
+th, td { border: 1px solid #9aa; padding: 4px 8px; font-size: 10pt; vertical-align: top; }
+th { background: #dae3f3; text-align: left; }
+blockquote { border-left: 3px solid #c0c0c0; margin: 8px 0; padding: 2px 12px; color: #444; background: #fafafa; }
+a { color: #1155cc; }
+</style>
+</head>
+<body>
+<h1>kArchiveManager 2.0 â€” UĹľivatelskĂ˝ manuĂˇl</h1>
+
+<p>PrĹŻvodce obsluhy <strong>Admin Console</strong> pro operĂˇtory L1/L2. PokrĂ˝vĂˇ vĹˇe, co potĹ™ebujeĹˇ vÄ›dÄ›t pro sledovĂˇnĂ­ a provoz archivace â€” sekce, obrazovky, tabulky, grafy a jejich atributy. TechnickĂ© detaily nasazenĂ­ a hlubĹˇĂ­ konfiguraci naleznete v <strong>Admin manuĂˇlu</strong> (po pĹ™ihlĂˇĹˇenĂ­).</p>
+
+<hr>
+
+<h2>Co kArchiveManager dÄ›lĂˇ</h2>
+
+<p>kArchiveManager automaticky <strong>archivuje starĂˇ data</strong> z provoznĂ­ch databĂˇzĂ­ (WMS/ERP â€” logy, doklady, integrace) do oddÄ›lenĂ© <strong>archivnĂ­ databĂˇze</strong>. CĂ­l je dvojĂ­:</p>
+
+<ul>
+<li>UdrĹľet provoznĂ­ databĂˇze <strong>ĹˇtĂ­hlĂ© a rychlĂ©</strong> â€” smaĹľeme jen data starĹˇĂ­ neĹľ je retence.</li>
+<li>Data <strong>neztratit</strong> â€” zĹŻstanou bezpeÄŤnÄ› uloĹľenĂˇ a dohledatelnĂˇ v archivu.</li>
+</ul>
+
+<p><strong>KlĂ­ÄŤovĂ© pravidlo:</strong> archivace je vĹľdy <strong>â€žnejdĹ™Ă­v archivuj, pak smaĹľ"</strong> v jednĂ© transakci. SmazĂˇno ze zdroje je pĹ™esnÄ› to, co se pĹ™edtĂ­m ĂşspÄ›ĹˇnÄ› zkopĂ­rovalo do archivu (kontrola <strong>Divergence = 0</strong>). Nic se neztratĂ­ ani nesmaĹľe omylem.</p>
+
+<h2>Admin Console</h2>
+
+<p>WebovĂ© rozhranĂ­ pro <strong>sledovĂˇnĂ­</strong> archivace (dostupnĂ© bez pĹ™ihlĂˇĹˇenĂ­) a pro <strong>konfiguraci</strong> (vyhrazeno pĹ™ihlĂˇĹˇenĂ˝m operĂˇtorĹŻm). OtevĹ™eĹˇ ho v prohlĂ­ĹľeÄŤi na adrese, kterou sdÄ›lĂ­ administrĂˇtor.</p>
+
+<h3>Sekce v levĂ© liĹˇtÄ›</h3>
+
+<table>
+<tr>
+<th>Sekce</th>
+<th>K ÄŤemu slouĹľĂ­</th>
+</tr>
+<tr>
+<td><strong>Dashboard</strong></td>
+<td>VstupnĂ­ souhrn: metriky (poÄŤet procesĹŻ, Ĺ™Ăˇdky ve zdroji/archivu), operaÄŤnĂ­ signĂˇly, tabulky poslednĂ­ch bÄ›hĹŻ a poÄŤtĹŻ tabulek. VolnÄ› ke staĹľenĂ­ je zde <strong>User manual</strong>.</td>
+</tr>
+<tr>
+<td><strong>Analysis &amp; Estimates</strong></td>
+<td>Grafy objemĹŻ dat ze vĹˇech procesĹŻ (vĹˇechny tabulky se nynĂ­ zobrazujĂ­ a majĂ­ internĂ­ scroll) a <strong>odhad dalĹˇĂ­ dĂˇvky</strong> â€” kolik MB a Ĺ™ĂˇdkĹŻ by pĹ™Ă­ĹˇtĂ­ bÄ›h zpracoval. Odhady jsou volitelnĂ© (pĹ™epĂ­naÄŤ Zobrazit odhady).</td>
+</tr>
+<tr>
+<td><strong>Runs</strong></td>
+<td>Historie bÄ›hĹŻ archivace a jejich stavy (OK, FAILED, STOPPED, DRYRUN); kliknutĂ­m na bÄ›h se otevĹ™e detail s poloĹľkami, objekty, doklady, dĂˇvkami.</td>
+</tr>
+<tr>
+<td><strong>Document lookup</strong></td>
+<td>VyhledĂˇnĂ­ konkrĂ©tnĂ­ho dokladu â€” zda je jeĹˇtÄ› ve zdroji, nebo uĹľ archivovĂˇn/smazĂˇn.</td>
+</tr>
+<tr>
+<td><strong>Configuration</strong></td>
+<td>NastavenĂ­ procesĹŻ, mapovĂˇnĂ­ (s novĂ˝m sloupcem <em>Overrides</em>), objektĹŻ, klĂ­ÄŤĹŻ, indexĹŻ, bÄ›hovĂ˝ch profilĹŻ; plĂˇnovĂˇnĂ­ SQL jobĹŻ; sprĂˇva operĂˇtorĹŻ a audit pĹ™ihlĂˇĹˇenĂ­. <strong>Jen pro pĹ™ihlĂˇĹˇenĂ© operĂˇtory.</strong></td>
+</tr>
+<tr>
+<td><strong>Validation</strong></td>
+<td>Kontrola sprĂˇvnosti konfigurace (nĂˇlezy ERROR/WARN/INFO se doporuÄŤenĂ˝m SQL).</td>
+</tr>
+<tr>
+<td><strong>Go-live</strong></td>
+<td>BrĂˇna pĹ™ipravenosti instance na ostrĂ˝ provoz (pĹ™ehled kontrol).</td>
+</tr>
+</table>
+
+<h2>PĹ™ihlĂˇĹˇenĂ­ a oprĂˇvnÄ›nĂ­</h2>
+
+<ul>
+<li><strong>PĹ™ehledy a vyhledĂˇvĂˇnĂ­</strong> jsou dostupnĂ© bez pĹ™ihlĂˇĹˇenĂ­.</li>
+<li><strong>Ăšpravy konfigurace</strong> vyĹľadujĂ­ pĹ™ihlĂˇĹˇenĂ­ operĂˇtora â€” tlaÄŤĂ­tko <strong>Lock / Unlock</strong> vpravo nahoĹ™e (pole <strong>Operator</strong> + <strong>Password</strong>). Po pĹ™ihlĂˇĹˇenĂ­ svĂ­tĂ­ â€žEditing as â€¦ (jmĂ©no)".</li>
+<li>NÄ›kterĂ© operace (napĹ™. <strong>restore</strong> dat zpÄ›t do produkce, zastavenĂ­ bÄ›hu) vyĹľadujĂ­ <strong>elevovanĂ©ho</strong> operĂˇtora.</li>
+<li>NovĂ©: <strong>PoslednĂ­ pĹ™ihlĂˇĹˇenĂ­</strong> â€” panel v Configuration ukazuje, kdo a kdy odblokoval editaci a historii neĂşspÄ›ĹˇnĂ˝ch pokusĹŻ.</li>
+</ul>
+
+<h2>SpoleÄŤnĂ© prvky</h2>
+
+<h3>Filtr v hlaviÄŤce</h3>
+
+<p>PlatĂ­ pro vĹˇechny sekce (Dashboard, Analysis &amp; Estimates, Runs, Document Lookup):</p>
+
+<table>
+<tr>
+<th>Pole</th>
+<th>VĂ˝znam</th>
+</tr>
+<tr>
+<td><strong>Process</strong></td>
+<td>KonkrĂ©tnĂ­ proces, nebo â€žAll processes" (vĂ˝chozĂ­).</td>
+</tr>
+<tr>
+<td><strong>Source DB</strong></td>
+<td>ZdrojovĂˇ (provoznĂ­) databĂˇze. PrĂˇzdnĂ© (â€žAny source") = vĹˇechny zdrojovĂ© DB.</td>
+</tr>
+<tr>
+<td><strong>Archive DB</strong></td>
+<td>CĂ­lovĂˇ archivnĂ­ databĂˇze (obvykle <code>kArchiveManagerBackups</code>).</td>
+</tr>
+<tr>
+<td><strong>Include disabled</strong></td>
+<td>Zobrazit i vypnutĂˇ mapovĂˇnĂ­/procesy.</td>
+</tr>
+<tr>
+<td><strong>Refresh</strong></td>
+<td>Znovu naÄŤĂ­st data podle filtru.</td>
+</tr>
+</table>
+
+<h3>StavovĂ© indikĂˇtory</h3>
+
+<p>Vpravo nahoĹ™e:</p>
+
+<ul>
+<li><strong>API OK / DB OK</strong> â€” konzole je spojenĂˇ s databĂˇzĂ­ a vĹˇe bÄ›ĹľĂ­; jinĂ˝ stav nahlaste administrĂˇtorovi.</li>
+<li><strong>Editing as â€¦ / Lock</strong> â€” zda jste pĹ™ihlĂˇĹˇenĂ˝ s prĂˇvem editace.</li>
+</ul>
+
+<h2>Dashboard</h2>
+
+<p><strong>CĂ­l:</strong> rychlĂ˝ pohled na zdravĂ­ systĂ©mu a poslednĂ­ aktivitu.</p>
+
+<h3>Metriky (dlaĹľdice)</h3>
+
+<ul>
+<li><strong>Active processes</strong> â€” poÄŤet zapnutĂ˝ch procesĹŻ.</li>
+<li><strong>Source rows</strong> â€” celkovĂ˝ poÄŤet Ĺ™ĂˇdkĹŻ ve zdrojĂ­ch (vĹˇechny tabulky vĹˇech procesĹŻ).</li>
+<li><strong>Archived rows</strong> â€” poÄŤet Ĺ™ĂˇdkĹŻ, kterĂˇ uĹľ jsou v archivu.</li>
+<li><strong>Recent non-OK runs</strong> â€” kolik poslednĂ­ch bÄ›hĹŻ neskonÄŤilo OK (FAILED, STOPPED).</li>
+</ul>
+
+<h3>OperaÄŤnĂ­ signĂˇly</h3>
+
+<p>OranĹľovĂˇ/ÄŤervenĂˇ upozornÄ›nĂ­ na problĂ©my: opakovanĂ© selhĂˇnĂ­, nekonzistence dat (Divergence â‰  0), chybÄ›jĂ­cĂ­ indexy, atd. KliknÄ›te na signĂˇl pro detail.</p>
+
+<h3>Tabulky</h3>
+
+<h4>Process movement</h4>
+
+<p>Sloupce: <code>Process, Source DB, Archive DB, Source rows, Archived, Delta</code> (rozdĂ­l zdrojâ’archiv), <code>Objects</code> (poÄŤet tabulek).</p>
+
+<h4>Prep/run batches</h4>
+
+<p>Sloupce: <code>Batch, Process, Status, Candidates, Prepared</code> (ÄŤas pĹ™Ă­pravy). PĹ™Ă­pravnĂ© bÄ›hy (PREP joby) vybĂ­rajĂ­ kandidĂˇty na archivaci bÄ›hem dne; tato tabulka ukazuje jejich stav.</p>
+
+<h4>Recent runs</h4>
+
+<p>Sloupce: <code>Run item, Process, Source, Status, Docs, Archived, Deleted, Started</code>. PoslednĂ­ spuĹˇtÄ›nĂ­ archivaÄŤnĂ­ch bÄ›hĹŻ.</p>
+
+<h4>Table counts</h4>
+
+<p>Sloupce: <code>Process, Source table, Archive table, Source, Archived, Source ok, Archive ok</code>. OvÄ›Ĺ™uje existenci a dostupnost tabulek.</p>
+
+<h2>Analysis &amp; Estimates</h2>
+
+<p><strong>CĂ­l:</strong> pochopit objem dat a plĂˇnovat bÄ›hy.</p>
+
+<h3>KPI dlaĹľdice</h3>
+
+<p>MÄ›Ĺ™enĂ© na vĹˇech procesech: poÄŤet mapovanĂ˝ch tabulek, Ĺ™Ăˇdky ve zdroji, Ĺ™Ăˇdky v archivu, poÄŤet bÄ›hĹŻ.</p>
+
+<h3>Grafy</h3>
+
+<p>ZobrazujĂ­:</p>
+
+<ul>
+<li>PĹ™enesenĂ© Ĺ™Ăˇdky podle dne/zdrojovĂ© DB/procesu.</li>
+<li>PĹ™enesenĂ© Ĺ™Ăˇdky podle dne/tabulky.</li>
+<li>KontrolnĂ­ pohled: source vs. archived (mÄ›ly by se shodovat; Divergence = 0).</li>
+<li>PĹ™enesenĂˇ data podle cutoffu (retence).</li>
+<li>Backlog ke smazĂˇnĂ­ (kolik Ĺ™ĂˇdkĹŻ ÄŤekĂˇ na archivaci).</li>
+</ul>
+
+<p><strong>NovĂ© v 2.0:</strong> grafy nynĂ­ zobrazujĂ­ <strong>vĹˇechny procesy</strong> (vĹˇechna mapovĂˇnĂ­ bez vĂ˝jimky). DlouhĂ© seznamy majĂ­ internĂ­ <strong>scroll na 460px</strong>, takĹľe strĂˇnka zĹŻstane ĂşhlednĂˇ a nejevĂ­ se zĂˇlomenĂ©. ÄŚtenĂ­ grafĹŻ: sloupce majĂ­ labely + hodnoty; duĂˇlnĂ­ sĂ©rie (zdroj/archiv) jsou barevnÄ› rozliĹˇeny.</p>
+
+<h3>Odhady dalĹˇĂ­ dĂˇvky</h3>
+
+<p><strong>PĹ™epĂ­naÄŤ:</strong> â€žZobrazit odhady" (vĂ˝chozĂ­ <em>vypnuto</em>). KdyĹľ zapnete, zobrazĂ­ se tabulka s prognĂłzou pro pĹ™Ă­ĹˇtĂ­ bÄ›h.</p>
+
+<p><strong>Zdroj filtru:</strong> â€žSource DB" z hlaviÄŤky; prĂˇzdnĂ© = vĹˇechny zdrojovĂ© DB.</p>
+
+<p><strong>TlaÄŤĂ­tka:</strong> <strong>PĹ™epoÄŤĂ­tat</strong> (spustĂ­ SQL a obnovĂ­ odhady), <strong>Export CSV</strong> (stĂˇhne si tabulku).</p>
+
+<h4>Sloupce odhadu</h4>
+
+<table>
+<tr>
+<th>Sloupec</th>
+<th>VĂ˝znam</th>
+</tr>
+<tr>
+<td><strong>Proces</strong></td>
+<td>KĂłd procesu.</td>
+</tr>
+<tr>
+<td><strong>Source DB</strong></td>
+<td>ZdrojovĂˇ databĂˇze mapovĂˇnĂ­.</td>
+</tr>
+<tr>
+<td><strong>ReĹľim</strong></td>
+<td><code>ARCHIVE_DELETE</code> (archivuj a smaĹľ), <code>DELETE_ONLY</code> (jen smaĹľ), <code>COPY_ONLY</code> (jen kopĂ­ruj).</td>
+</tr>
+<tr>
+<td><strong>Limit dĂˇvky (Ĺ™ĂˇdkĹŻ)</strong></td>
+<td>NejvyĹˇĹˇĂ­ poÄŤet Ĺ™ĂˇdkĹŻ, kterĂ˝ jeden bÄ›h zpracuje. Odhad se poÄŤĂ­tĂˇ pro tento limit, ne pro celou tabulku.</td>
+</tr>
+<tr>
+<td><strong>Zdroj Ĺ™ĂˇdkĹŻ</strong></td>
+<td>AktuĂˇlnĂ­ poÄŤet Ĺ™ĂˇdkĹŻ ve zdrojovĂ˝ch tabulkĂˇch procesu (vĹˇechny tabulky dohromady).</td>
+</tr>
+<tr>
+<td><strong>Payload MB</strong></td>
+<td>Objem dat, kterĂ˝ pĹ™Ă­ĹˇtĂ­ dĂˇvka <em>pĹ™esune</em> (limit Ĺ™ĂˇdkĹŻ Ă— prĹŻmÄ›rnĂˇ velikost Ĺ™Ăˇdku). Toto jsou surovĂˇ data bez reĹľie.</td>
+</tr>
+<tr>
+<td><strong>Archiv rĹŻst MB</strong></td>
+<td>O kolik pĹ™ibliĹľnÄ› naroste <strong>archivnĂ­ DB</strong>. PoÄŤĂ­tĂˇ se jako Payload Ă— reĹľie archivu (~Ă—1,2); platĂ­ jen pro ARCHIVE_DELETE.</td>
+</tr>
+<tr>
+<td><strong>Log tlak MB</strong></td>
+<td>Odhad zatĂ­ĹľenĂ­ <strong>transakÄŤnĂ­ho logu</strong> bÄ›hem dĂˇvky (Payload Ă— ~3). SmazĂˇnĂ­ a archivace generujĂ­ zĂˇznamy v logu.</td>
+</tr>
+<tr>
+<td><strong>PlĂˇn MB (s rezervou)</strong></td>
+<td>PlĂˇnovacĂ­ ÄŤĂ­slo pro IT: (Archiv rĹŻst + Log tlak) Ă— bezpeÄŤnostnĂ­ rezerva (~Ă—1,3). Podle nÄ›j posuÄŹte, zda mĂˇte dost mĂ­sta a log prostoru <strong>pĹ™ed</strong> spuĹˇtÄ›nĂ­m bÄ›hu.</td>
+</tr>
+</table>
+
+<p><strong>Jak ÄŤĂ­st odhady:</strong> Pokud â€žPayload MB" = 500 a â€žLog tlak" = 1500, pak â€žPlĂˇn MB" bude zhruba 2600. Pokud mĂˇte jen 1 GB volnĂ©ho mĂ­sta v logu, bÄ›h se nebude moct spustit. OpatrnÄ› s velkĂ˝mi batch limity na malĂ˝ch okĂ©nkĂˇch.</p>
+
+<h2>Runs</h2>
+
+<p><strong>CĂ­l:</strong> sledovat historii a stav jednotlivĂ˝ch bÄ›hĹŻ; zastavit bÄ›h ÄŤi obnovit data.</p>
+
+<h3>Seznam bÄ›hĹŻ</h3>
+
+<p>Sloupce: <code>Run, Item, Process, Source, Archive, Mode, Status, Started, Finished, Duration, Batches, Docs, Rows, Error</code>.</p>
+
+<p><strong>Stavy bÄ›hĹŻ:</strong></p>
+
+<ul>
+<li><strong>OK</strong> â€” bÄ›h probÄ›hl v poĹ™Ăˇdku, veĹˇkerĂˇ data byla zpracovĂˇna.</li>
+<li><strong>FAILED</strong> â€” bÄ›h selhal/byl pĹ™eruĹˇen; data zĹŻstala konzistentnĂ­, bÄ›h se opakuje pĹ™Ă­ĹˇtÄ› â€” opakovanĂ© FAILED hlaste administrĂˇtorovi.</li>
+<li><strong>STOPPED</strong> â€” zastaveno operĂˇtorem; lze pokraÄŤovat v pĹ™Ă­ĹˇtĂ­ bÄ›hu (data jsou konzistentnĂ­).</li>
+<li><strong>DRYRUN</strong> â€” nĂˇhled; nic se nemazalo ani nearchivovalo, jen se spoÄŤĂ­tali kandidĂˇti.</li>
+</ul>
+
+<h3>Detail bÄ›hu</h3>
+
+<p>KliknutĂ­m na Ĺ™Ăˇdek bÄ›hu otevĹ™ete detail. Panely:</p>
+
+<h4>Run items</h4>
+
+<p>Sloupce: <code>Item, Process, Mode, Status, Batches, Docs, Deleted, Archived, Error</code>. Jeden proces mĹŻĹľe mĂ­t vĂ­ce mapovĂˇnĂ­ (zdroj-archiv pĂˇry); kaĹľdĂˇ je jedna poloĹľka.</p>
+
+<h4>Work batches</h4>
+
+<p>Sloupce: <code>Batch, Process, Status, Prepared, Started, Completed, Last key</code>. InternĂ­ dĂˇvky, do kterĂ˝ch byla data rozdÄ›lena. V ANCHOR reĹľimu zde uvidĂ­te seznam dokladĹŻ; v TIMESTAMP reĹľimu hranice datumĹŻ.</p>
+
+<h4>Object movement</h4>
+
+<p>Sloupce: <code>Object item, Item, Process, Schema, Table, Deleted, Archived, Logged</code>. PoÄŤty Ĺ™ĂˇdkĹŻ zpracovanĂ˝ch v kaĹľdĂ© tabulce.</p>
+
+<h4>Document audit</h4>
+
+<p>Sloupce: <code>Audit, Item, Process, Label, Key, Archived, Deleted at</code>. Stopa archivovanĂ˝ch dokladĹŻ (jen pokud je Audit level = ROW).</p>
+
+<h3>Akce na bÄ›hu</h3>
+
+<ul>
+<li><strong>Stop</strong> â€” kooperativnĂ­ zastavenĂ­ bÄ›hu. BÄ›h se pokusĂ­ uzavĹ™Ă­t aktuĂˇlnĂ­ dĂˇvku, pak se zastavĂ­. Lze pokraÄŤovat v pĹ™Ă­ĹˇtĂ­ bÄ›hu.</li>
+<li><strong>Restore</strong> â€” vrĂˇcenĂ­ archivovanĂ˝ch Ĺ™ĂˇdkĹŻ zpÄ›t do zdroje (vyĹľaduje elevovanĂ©ho operĂˇtora; nejdĹ™Ă­v nĂˇhled, pak potvrzenĂ­). Operace je rate-limitovanĂˇ (zabrĂˇnÄ›nĂ­ nĂˇhodnĂ˝m hromadnĂ˝m obnovenĂ­m).</li>
+</ul>
+
+<h2>Document lookup</h2>
+
+<p><strong>CĂ­l:</strong> najĂ­t konkrĂ©tnĂ­ doklad a zjistit, kam zmizl.</p>
+
+<h3>VyhledĂˇvĂˇnĂ­</h3>
+
+<p>Zadejte <strong>klĂ­ÄŤ dokladu</strong> (napĹ™. ÄŤĂ­slo dokladu, ROWID, nebo jakĂ˝koli klĂ­ÄŤovĂ˝ sloupec â€” zĂˇleĹľĂ­ na konfiguraci procesu). SystĂ©m zjistĂ­, zda je doklad:</p>
+
+<ul>
+<li>StĂˇle ve zdroji (nebyl jeĹˇtÄ› archivovĂˇn).</li>
+<li>V archivu (archivovĂˇn a smazĂˇn ze zdroje).</li>
+<li>Nikdy nebyl zpracovĂˇn (neodpovĂ­dĂˇ cutoffu).</li>
+</ul>
+
+<h3>Souhrn vĂ˝sledku</h3>
+
+<p>Sloupce: <code>Result, Key, Processes, Archived, Run item, Source</code>.</p>
+
+<h3>Detaily (rozĹˇĂ­Ĺ™enĂ­)</h3>
+
+<p>Sloupce: <code>Audit, Process, Label, Key, Archived, Deleted at, Status</code>. Pokud byl doklad zpracovĂˇn, vidĂ­te, kterĂ˝m bÄ›hem a kdy.</p>
+
+<h2>Configuration (jen pro pĹ™ihlĂˇĹˇenĂ© operĂˇtory)</h2>
+
+<p><strong>CĂ­l:</strong> nastavit procesy, mapovĂˇnĂ­, rozvrhy a sprĂˇvu uĹľivatelĹŻ.</p>
+
+<p><strong>Princip:</strong> KaĹľdĂˇ zmÄ›na vyĹľaduje <strong>dĹŻvod zmÄ›ny</strong> (min. 6 znakĹŻ) a je auditovĂˇna (zaznamenĂˇno, kdo a kdy zmÄ›nil co).</p>
+
+<h3>Struktura konfigurace</h3>
+
+<p>Konfigurace mĂˇ dva ĂşrovnÄ›:</p>
+
+<ul>
+<li><strong>Process</strong> (arch.Process) â€” vĂ˝chozĂ­ hodnoty pro celĂ˝ proces (reĹľim, retence, audit, batch limity, cutoff).</li>
+<li><strong>ProcessDatabase / mapovĂˇnĂ­</strong> (arch.ProcessDatabase) â€” override pro konkrĂ©tnĂ­ zdrojovou DB (dÄ›dĂ­ z procesu, ale mĹŻĹľe pĹ™epsat, napĹ™. jinĂ˝ audit level pro citlivĂ© zdroje).</li>
+</ul>
+
+<p><strong>NovĂ© v 2.0:</strong> <strong>Sloupec â€žOverrides"</strong> v tabulce mapovĂˇnĂ­ jasnÄ› ukazuje, kterĂˇ pole kaĹľdĂ© mapovĂˇnĂ­ pĹ™epĂ­Ĺˇe (napĹ™. â€žMode, Audit, BatchRows" = vysvÄ›tluje, Ĺľe toto mapovĂˇnĂ­ uĹľ nemĂˇ stejnĂ˝ reĹľim/audit/limity jako vĂ˝chozĂ­ proces). Panel editoru procesu mĂˇ upozornÄ›nĂ­: <em>â€žJednĂˇ se o vĂ˝chozĂ­ hodnoty; jednotlivĂˇ mapovĂˇnĂ­ je mohou pĹ™epsat."</em></p>
+
+<h3>Panel detailu procesu</h3>
+
+<p>Editace jednoho procesu. Pole:</p>
+
+<table>
+<tr>
+<th>Pole</th>
+<th>Typ</th>
+<th>Dopad</th>
+</tr>
+<tr>
+<td><strong>Description</strong></td>
+<td>Text</td>
+<td>Popis procesu (informativnĂ­).</td>
+</tr>
+<tr>
+<td><strong>Enabled</strong></td>
+<td>Ano/Ne</td>
+<td>âš ď¸Ź VypnutĂ­ â†’ data ve zdroji pĹ™estanou ubĂ˝vat. ZapnutĂ­m opÄ›t zaÄŤne archivace.</td>
+</tr>
+<tr>
+<td><strong>Strategy</strong></td>
+<td>ANCHOR / TIMESTAMP</td>
+<td>Jak vybĂ­rat kandidĂˇty: podle dokladĹŻ (ANCHOR) nebo podle ÄŤasovĂ˝ch razĂ­tek (TIMESTAMP). NemÄ›nĂ­ se ÄŤasto.</td>
+</tr>
+<tr>
+<td><strong>Mode</strong></td>
+<td>Select</td>
+<td>âš ď¸Ź <code>Archive + delete</code> archivuj a smaĹľ Â· <code>Delete only</code> jen smaĹľ <strong>bez archivace</strong> (nelze obnovit!) Â· <code>Copy only</code> jen kopĂ­ruj do archivu.</td>
+</tr>
+<tr>
+<td><strong>Retention days</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>âš ď¸Ź StĂˇĹ™Ă­ dat k archivaci (cutoff = dnes â’ N dnĂ­). <strong>SnĂ­ĹľenĂ­</strong> archivuje/maĹľe starĹˇĂ­ a <strong>vĂ­ce</strong> dat hned (nevratnĂ©). SpodnĂ­ mez hlĂ­dĂˇ pojistka.</td>
+</tr>
+<tr>
+<td><strong>Cutoff safety lag minutes</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>BezpeÄŤnostnĂ­ odstup cutoffu (minuty) â€” nezpracuje data tÄ›snÄ› na hranÄ›. BÄ›ĹľnÄ› 0â€“30 minut.</td>
+</tr>
+<tr>
+<td><strong>Cutoff mode</strong></td>
+<td>Select</td>
+<td><code>Relative retention</code> (klouzavĂ˝, dnes â’ Retention dnĂ­) â† <strong>doporuÄŤeno</strong> Â· <code>Fixed cutoff date</code> (pevnĂ© datum; pouĹľijte jen vĂ˝jimeÄŤnÄ›).</td>
+</tr>
+<tr>
+<td><strong>Cutoff date (fixed)</strong></td>
+<td>Datum</td>
+<td>Jen kdyĹľ Cutoff mode = Fixed. <strong>NovĂ© v 2.0:</strong> editor nynĂ­ ukazuje <strong>efektivnĂ­ mĂ­stnĂ­ hranici</strong> (napĹ™. â€ž01:00 CET" na zimu, â€ž02:00 CEST" na lĂ©to), protoĹľe internamente se pouĹľĂ­vĂˇ UTC. Datum je interpretovĂˇno jako 00:00:00 UTC. DoporuÄŤujeme zĹŻstat na relativnĂ­ retenci (bez TZ matenĂ­).</td>
+</tr>
+<tr>
+<td><strong>Batch doc count</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>PoÄŤet <strong>dokladĹŻ</strong> na dĂˇvku (ANCHOR reĹľim). VyĹˇĹˇĂ­ = vĂ­c zpracuje za bÄ›h, delĹˇĂ­ doba transakce.</td>
+</tr>
+<tr>
+<td><strong>Batch row count</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>PoÄŤet <strong>Ĺ™ĂˇdkĹŻ</strong> na dĂˇvku (TIMESTAMP reĹľim). VyĹˇĹˇĂ­ = vĂ­c zpracuje, delĹˇĂ­ bÄ›h, vÄ›tĹˇĂ­ zĂˇtÄ›Ĺľ logu.</td>
+</tr>
+<tr>
+<td><strong>Max batches per run</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>Kolik dĂˇvek max za bÄ›h. Limit dĂˇvky = (Batch row/doc count) Ă— Max batches per run. VyĹˇĹˇĂ­ = vĂ­c zpracuje, delĹˇĂ­ bÄ›h, vĂ­ce tlaku na IO/log.</td>
+</tr>
+<tr>
+<td><strong>Delay ms between batches</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>Pauza mezi dĂˇvkami (ms) â€” ĹˇetĹ™Ă­ I/O a nechĂˇ prostor provozu. BÄ›ĹľnÄ› 100â€“1000 ms v produkci.</td>
+</tr>
+<tr>
+<td><strong>Document key label</strong></td>
+<td>Text</td>
+<td>Jak se klĂ­ÄŤ zobrazuje v auditÄ› (business klĂ­ÄŤ vs. ROWID). InformativnĂ­.</td>
+</tr>
+<tr>
+<td><strong>Audit level</strong></td>
+<td>Select</td>
+<td><code>NONE</code> bez auditnĂ­ stopy (nejvĂ˝kon) Â· <code>BATCH</code> shrnutĂ­ na dĂˇvku Â· <code>OBJECT</code> shrnutĂ­ na tabulku Â· <code>ROW</code> stopa na kaĹľdĂ˝ doklad (dohledatelnost, ~10% reĹľie). Zvolte podle potĹ™eby auditu.</td>
+</tr>
+<tr>
+<td><strong>Allow delete without archive</strong></td>
+<td>Ano/Ne</td>
+<td>âš ď¸Ź PovolĂ­ smazat Ĺ™Ăˇdky <strong>bez archivnĂ­ kopie</strong> (jen v Delete-only reĹľimu). VyjĂ­mka ze zĂˇkona; opatrnÄ›.</td>
+</tr>
+</table>
+
+<h3>Tabulka: Process</h3>
+
+<p>Sloupce: <code>Process, Description, Enabled, Strategy, Retention, Audit, Objects, Modified</code>. PĹ™ehled vĹˇech procesĹŻ.</p>
+
+<h3>Tabulka: Database mappings (novĂ© sloupce)</h3>
+
+<p>Sloupce: <code>Process, Source, Archive, Enabled, Run order, Retention, Batch docs, Batch rows, Overrides</code>.</p>
+
+<p><strong>NovĂ©:</strong> <strong>Overrides</strong> ukazuje pole, kterĂˇ toto mapovĂˇnĂ­ pĹ™epĂ­Ĺˇe (napĹ™. â€žMode, Audit"). Zdroj pole se takĂ© znaÄŤĂ­ badgem: amber = pĹ™epsĂˇno na mapovĂˇnĂ­, neutrĂˇlnĂ­ = dÄ›dÄ›no z procesu. KliknutĂ­m na mapovĂˇnĂ­ se otevĹ™e editor s advisorym: <em>â€žZde mĹŻĹľete pĹ™epsat vĂ˝chozĂ­ hodnoty z procesu."</em></p>
+
+<h3>Tabulka: Effective objects</h3>
+
+<p>Sloupce: <code>Process, Source, Table, Order, Enabled, Archive schema, Archive table</code>. VĂ˝slednĂ˝ seznam tabulek, kterĂ© budou archivovĂˇny (vÄŤetnÄ› pĹ™epsanĂ˝ch schĂ©mat/jmen).</p>
+
+<h3>Tabulka: Process keys</h3>
+
+<p>Sloupce: <code>Process, Ordinal, Name, Expression, SQL type, Required</code>. KlĂ­ÄŤe dokladu (aĹľ 8 klĂ­ÄŤĹŻ na proces).</p>
+
+<h3>Tabulka: Index requirements</h3>
+
+<p>Sloupce: <code>Process, Type, Object, Key columns, Mandatory, Mappings</code>. Indexy, kterĂ© musĂ­ existovat na zdroji (pro vĂ˝kon vĂ˝bÄ›ru kandidĂˇtĹŻ a smazĂˇnĂ­). Validation hlĂˇsĂ­ chybÄ›jĂ­cĂ­ povinnĂ© indexy.</p>
+
+<h3>Tabulka: Run profiles</h3>
+
+<p>Sloupce: <code>Profile, Description, Enabled, Scheduled, Order, Process filter, Source filter, Dry run</code>. BÄ›hovĂ© profily jsou pĹ™edvolby pro spuĹˇtÄ›nĂ­ (napĹ™. â€žNoÄŤnĂ­ bÄ›h RF_LOG2" vs. â€žRutinnĂ­ dennĂ­ bÄ›h").</p>
+
+<h3>Tabulka: Change history</h3>
+
+<p>Sloupce: <code>Change set, Status, User, Requested, Items, Fields, Validation</code>. PĹ™ehled vĹˇech zmÄ›n (kdo a kdy co zmÄ›nil, dĹŻvod, validace).</p>
+
+<h3>PlĂˇnovĂˇnĂ­ â€” SQL Agent joby</h3>
+
+<p>Panel â€žPlĂˇnovĂˇnĂ­": konfigurujete joby <strong>PREP</strong> (pĹ™Ă­prava kandidĂˇtĹŻ) a <strong>RUN</strong> (archivace).</p>
+
+<p>U kaĹľdĂ©ho jobu:</p>
+
+<ul>
+<li><strong>Povolit/ZakĂˇzat</strong> â€” zapnutĂ­/vypnutĂ­.</li>
+<li><strong>ÄŚetnost</strong> â€” DennÄ› / KaĹľdou hodinu / VlastnĂ­.</li>
+<li><strong>ÄŚas</strong> â€” HH:MM (napĹ™. 22:00 pro noÄŤnĂ­ bÄ›h).</li>
+<li><strong>Rozvrh aktivnĂ­</strong> â€” vidĂ­te, zda je job aktuĂˇlnÄ› naplĂˇnovĂˇn.</li>
+</ul>
+
+<p>PREP (pĹ™Ă­prava) se obvykle spouĹˇtĂ­ bÄ›hem dne a prĹŻbÄ›ĹľnÄ› vybĂ­rĂˇ kandidĂˇty. RUN se spouĹˇtĂ­ v oknÄ›, kdy je databĂˇze mĂ©nÄ› zatĂ­ĹľenĂˇ (typicky v noci).</p>
+
+<h3>NovĂ©: Panel PoslednĂ­ pĹ™ihlĂˇĹˇenĂ­</h3>
+
+<p>VidĂ­te, kdo a kdy odblokoval editaci. Historie zahrnuje ĂşspÄ›ĹˇnĂˇ pĹ™ihlĂˇĹˇenĂ­ i neĂşspÄ›ĹˇnĂ© pokusy. InformativnĂ­ pro audit.</p>
+
+<h3>NovĂ©: Panel PĹ™Ă­stup k editaci</h3>
+
+<p>ÄŚtenĂ­ (seznam operĂˇtorĹŻ): Windows/AD allowlist, DB operĂˇtoĹ™i, stav sdĂ­lenĂ©ho hesla. Jen informativnĂ­ pohled (Ăşpravy se dÄ›lajĂ­ jinde nebo pĹ™es SQL). Zobrazuje, jakĂ© autentizaÄŤnĂ­ zdroje jsou nakonfigurovanĂ©.</p>
+
+<h3>Tabulka: OperĂˇtoĹ™i konzole</h3>
+
+<p>Sloupce: <code>UĹľivatel, JmĂ©no, Heslo, Povolen, ElevovanĂ˝ (restore)</code>.</p>
+
+<ul>
+<li><strong>UĹľivatel</strong> â€” AD jmĂ©no (Read-only).</li>
+<li><strong>JmĂ©no</strong> â€” zobrazovanĂ© jmĂ©no (editovatelnĂ©).</li>
+<li><strong>Heslo</strong> â€” heslo pro konzoli; uklĂˇdĂˇ se jen bezpeÄŤnĂ˝ otisk (nikdy ÄŤitelnÄ›). PĹ™i ĂşpravÄ›: prĂˇzdnĂ© = beze zmÄ›ny, vyplnÄ›nĂ© = nastavĂ­ novĂ©.</li>
+<li><strong>Povolen</strong> â€” smĂ­ se pĹ™ihlĂˇsit?</li>
+<li><strong>ElevovanĂ˝</strong> â€” smĂ­ provĂˇdÄ›t zvĂ˝ĹˇenĂ© operace (restore, stop bÄ›hu)? âš ď¸Ź PĹ™idÄ›lujte jen dĹŻvÄ›ryhodnĂ˝m.</li>
+</ul>
+
+<h2>Validation</h2>
+
+<p><strong>CĂ­l:</strong> kontrola sprĂˇvnosti konfigurace a indexĹŻ.</p>
+
+<h3>SpuĹˇtÄ›nĂ­</h3>
+
+<p>TlaÄŤĂ­tko â€žValidate" v sekci Validation. SpustĂ­ se sekvence SQL testĹŻ.</p>
+
+<h3>NĂˇlezovĂˇ tabulka</h3>
+
+<p>Sloupce: <code>Code, Severity, Process, Source, Archive, Object, Finding, Suggested SQL</code>.</p>
+
+<p><strong>Severity:</strong></p>
+
+<ul>
+<li><strong>ERROR</strong> â€” kritickĂˇ chyba (napĹ™. chybÄ›jĂ­cĂ­ index, nekonzistence DB). Opravit <strong>musĂ­</strong>.</li>
+<li><strong>WARN</strong> â€” varovĂˇnĂ­ (napĹ™. chybnĂ˝ typ sloupce, nevhodnĂˇ strategie). ZvĂˇĹľit.</li>
+<li><strong>INFO</strong> â€” informace (napĹ™. nepouĹľĂ­vanĂˇ mapovĂˇnĂ­). Pouze pro vÄ›domost.</li>
+</ul>
+
+<p><strong>Suggested SQL:</strong> kdyĹľ je hlĂˇĹˇen ERROR, tabulka nabĂ­zĂ­ SQL skript k opravÄ›. ZkopĂ­rujte si jej a vykonajte v SQL Management Studiu nebo pĹ™es konzoli.</p>
+
+<h2>Go-live</h2>
+
+<p><strong>CĂ­l:</strong> checklist pĹ™ipravenosti na ostrĂ˝ provoz.</p>
+
+<h3>PĹ™ehled kontrol</h3>
+
+<p>Tabulka se sloupci: <code>Area, Check, Status, Detail, Recommendation</code>.</p>
+
+<p><strong>Oblasti (Area):</strong> konfigurace, indexy, disk prostoru, log, operĂˇtoĹ™i, testy.</p>
+
+<p><strong>Status:</strong> READY, READY WITH WARNINGS, NOT READY.</p>
+
+<p><strong>SouhrnnĂ˝ stav:</strong> zelenĂ˝/oranĹľovĂ˝/ÄŤervenĂ˝ indikĂˇtor nahoĹ™e.</p>
+
+<h2>Konfigurace â€” hodnoty a dopad</h2>
+
+<p>Tato sekce se tĂ˝kĂˇ hodnot, kterĂ© editujete v Configuration. âš ď¸Ź = <strong>kritickĂ˝ parametr</strong> â€” mÄ›Ĺte jen s vÄ›domĂ­m dopadu.</p>
+
+<h3>Editor mapovĂˇnĂ­ (Database override)</h3>
+
+<p>StejnĂˇ pole jako u procesu, ale jako <strong>override</strong> (prĂˇzdnĂ© = dÄ›dĂ­ z procesu):</p>
+
+<table>
+<tr>
+<th>Pole</th>
+<th>Typ</th>
+<th>Dopad</th>
+</tr>
+<tr>
+<td><strong>Audit level override</strong></td>
+<td>Select</td>
+<td>âš ď¸Ź <code>NONE</code> mazĂˇnĂ­ bez per-row stopy (vĂ˝kon) Â· <code>BATCH</code> shrnutĂ­ na dĂˇvku Â· <code>ROW</code> stopa na doklad (audit). â€žUse process default" = dÄ›dĂ­ z procesu.</td>
+</tr>
+<tr>
+<td><strong>Candidate WHERE cutoff (cheap-mode)</strong></td>
+<td>Text</td>
+<td>âšˇ VĂ˝konovĂ˝ knob pro velkoobjemovĂ© TIMESTAMP zdroje (index-ordered vĂ˝bÄ›r bez pĹ™evodu ÄŤasu). âš ď¸Ź Funguje jen na <strong>ISO-chronologickĂ©m</strong> sloupci (yyyymmddâ€¦). U smĂ­ĹˇenĂ˝ch formĂˇtĹŻ tiĹˇe vybere <strong>mĂ©nÄ›</strong> kandidĂˇtĹŻ (data se nezarchivujĂ­, bez viditelnĂ© chyby). PĹ™i pochybnostech nech prĂˇzdnĂ©.</td>
+</tr>
+<tr>
+<td><strong>Candidate ORDER BY (cheap-mode)</strong></td>
+<td>Text</td>
+<td>SurovĂ˝ ÄŤasovĂ˝ sloupec pro Ĺ™azenĂ­ (index-ordered seek). PrĂˇzdnĂ© = Ĺ™adĂ­ dle poÄŤĂ­tanĂ©ho UTC ÄŤasu. Optimalizace pro rychlĂ© sekvenÄŤnĂ­ ÄŤtenĂ­.</td>
+</tr>
+</table>
+
+<h3>Editor objektu (tabulky)</h3>
+
+<table>
+<tr>
+<th>Pole</th>
+<th>Typ</th>
+<th>Dopad</th>
+</tr>
+<tr>
+<td><strong>Source schema / table</strong></td>
+<td>Text</td>
+<td>ZdrojovĂˇ tabulka (dbo.RF_LOG2 atd.).</td>
+</tr>
+<tr>
+<td><strong>Delete order</strong></td>
+<td>ÄŚĂ­slo</td>
+<td>âš ď¸Ź PoĹ™adĂ­ mazĂˇnĂ­ tabulek v rĂˇmci dokladu â€” musĂ­ respektovat FK (cizĂ­ klĂ­ÄŤe). DÄ›ti pĹ™ed rodiÄŤi, jinak chyba.</td>
+</tr>
+<tr>
+<td><strong>Delete mode</strong></td>
+<td>Select</td>
+<td>Jako Mode na procesu. Typicky dÄ›dĂ­.</td>
+</tr>
+<tr>
+<td><strong>Timestamp expression (TIMESTAMP)</strong></td>
+<td>SQL</td>
+<td>âš ď¸Ź SQL vĂ˝raz vracejĂ­cĂ­ UTC ÄŤas Ĺ™Ăˇdku (napĹ™. <code>CONVERT(datetimeoffset(0), t.CreatedAt AT TIME ZONE 'Central European Standard Time' AT TIME ZONE 'UTC', 127)</code>). MusĂ­ sprĂˇvnÄ› pĹ™evĂˇdÄ›t do UTC, jinak ĹˇpatnĂ˝ vĂ˝bÄ›r.</td>
+</tr>
+<tr>
+<td><strong>Join to anchor predicate (ANCHOR)</strong></td>
+<td>SQL</td>
+<td>JOIN na klĂ­ÄŤe dokladu (k.Key1..Key8). NapĹ™. <code>ON t.ShipmentId = k.Key1</code>.</td>
+</tr>
+<tr>
+<td><strong>Additional WHERE filter</strong></td>
+<td>SQL</td>
+<td>Filtr na kaĹľdĂ˝ DELETE (vylouÄŤĂ­ Ĺ™Ăˇdky, co se nikdy nemajĂ­ archivovat). NapĹ™. <code>WHERE t.Status != 'HOLD'</code>.</td>
+</tr>
+<tr>
+<td><strong>Candidate SELECT expression (cheap-mode)</strong></td>
+<td>SQL</td>
+<td>âšˇ LevnĂˇ projekce ÄŤasu; aktivnĂ­ jen s Candidate WHERE cutoff. PrĂˇzdnĂ© = klasickĂ© ÄŤtenĂ­. Optimalizace.</td>
+</tr>
+<tr>
+<td><strong>Archive schema / table</strong></td>
+<td>Text</td>
+<td>CĂ­l v archivu. Lze pouĹľĂ­t zĂˇstupnĂ˝ symbol <code>{SourceDb}</code> (napĹ™. <code>archive_{SourceDb}.dbo.RF_LOG2</code>).</td>
+</tr>
+<tr>
+<td><strong>Require archive for delete</strong></td>
+<td>Ano/Ne</td>
+<td>âš ď¸Ź VypnutĂ­ = smaĹľe i bez archivnĂ­ kopie (vĂ˝jimka). BÄ›ĹľnÄ› zapnuto (pojistka).</td>
+</tr>
+<tr>
+<td><strong>Natural key label</strong></td>
+<td>Text</td>
+<td>Popis pĹ™irozenĂ©ho klĂ­ÄŤe (audit). InformativnĂ­.</td>
+</tr>
+</table>
+
+<h3>Editor klĂ­ÄŤe dokladu / indexu / bÄ›hovĂ©ho profilu</h3>
+
+<p><strong>KlĂ­ÄŤ dokladu:</strong> Key ordinal (1..8), Key name, Source expression SQL (napĹ™. <code>t.ROWID</code>), SQL type (âš ď¸Ź musĂ­ odpovĂ­dat typu ve zdroji), Required (povinnĂ˝?).</p>
+
+<p><strong>Index requirement:</strong> Requirement type (Selection / Join / Delete / Order / Partition), Source schema/table, Key columns CSV, Include columns CSV, Filter SQL, Mandatory (Validation hlĂˇsĂ­ chybÄ›jĂ­cĂ­), Notes.</p>
+
+<p><strong>Run profile:</strong> Enabled, Scheduled, Run order, Process/Source DB/Archive DB filter, âš ď¸Ź Run window minutes (po vyprĹˇenĂ­ okna se bÄ›h ukonÄŤĂ­ â€” krĂˇtkĂ© okno nedokonÄŤĂ­ velkĂ˝ objem), Max candidates, Paused cooldown seconds, Dry run (nĂˇhled).</p>
+
+<h2>Best practices â€” prĂˇce s Admin Console</h2>
+
+<ul>
+<li><strong>PĹ™ed uloĹľenĂ­m:</strong> zkontroluj hlĂˇĹˇku Concurrency check (neuklĂˇdej pĹ™es cizĂ­ zmÄ›nu) a vyplĹ smysluplnĂ˝ Change reason (â‰Ą 6 znakĹŻ).</li>
+<li><strong>NĂˇhled:</strong> PouĹľĂ­vej Review changes a Show effective plan (bez spuĹˇtÄ›nĂ­ SQL, jen nĂˇhled vĂ˝sledku).</li>
+<li><strong>PĹ™ed velkĂ˝m bÄ›hem:</strong> zapni Analysis & Estimates a podĂ­vej se na PlĂˇn MB (s rezervou) â€” je dost mĂ­sta a log prostoru?</li>
+<li><strong>NovĂ© nastavenĂ­:</strong> nejdĹ™Ă­v vyzkouĹˇej Dry run profil (nic nesmaĹľe).</li>
+<li><strong>Pojistky:</strong> NevypĂ­nej (Require archive for delete, Allow delete without archive, Audit = NONE), pokud nevĂ­Ĺˇ proÄŤ.</li>
+<li><strong>Rozvrhy:</strong> Job nastavuj mimo ĹˇpiÄŤku (noÄŤnĂ­ okno); sleduj Validation (ERROR oprav) a Recent non-OK runs.</li>
+<li><strong>Retence:</strong> SnĂ­ĹľenĂ­ Retention days nebo posun Cutoff archivuje/maĹľe vĂ­ce a nevratnÄ› â€” rozmysli dopad.</li>
+<li><strong>Restore:</strong> provĂˇdÄ›j jen jako elevovanĂ˝ operĂˇtor a vĹľdy nejdĹ™Ă­v pĹ™es nĂˇhled (preview); operace je rate-limitovanĂˇ.</li>
+<li><strong>Overrides:</strong> Pokud chceĹˇ zmÄ›nit hodnotu, kterou nÄ›kterĂ© mapovĂˇnĂ­ pĹ™episuje, uprav mapovĂˇnĂ­, ne proces (vĂ˝chozĂ­ hodnota nemĂˇ efekt).</li>
+</ul>
+
+<h2>BezpeÄŤnost a dohledatelnost dat</h2>
+
+<ul>
+<li><strong>ArchivnĂ­ databĂˇze</strong> je â€žsystĂ©m zĂˇznamu" â€” chrĂˇnÄ›nĂˇ (bÄ›ĹľnĂ˝ provoz nemĹŻĹľe mazat), pravidelnÄ› zĂˇlohovanĂˇ, v FULL recovery reĹľimu.</li>
+<li><strong>SmazĂˇnĂ­ ze zdroje</strong> probÄ›hne <strong>aĹľ po</strong> ĂşspÄ›ĹˇnĂ© archivaci â€” obÄ› operace v jednĂ© transakci, atomickĂ©.</li>
+<li><strong>AuditnĂ­ stopa:</strong> kaĹľdĂ˝ bÄ›h (Audit level ROW) zaznamenĂˇ, jakĂ© doklady byly archivovĂˇny a smazĂˇny (RunDocAudit).</li>
+<li><strong>PĹ™ihlĂˇĹˇenĂ­ operĂˇtorĹŻ:</strong> evidovĂˇn je ÄŤas a vĂ˝sledek kaĹľdĂ©ho pokusu (konsole._LoginAudit).</li>
+<li><strong>ZmÄ›ny konfigurace:</strong> kaĹľdĂˇ editace je zaznamenĂˇna (Change history) â€” kdo, kdy, co a proÄŤ.</li>
+</ul>
+
+<h2>OperaÄŤnĂ­ zĂˇruky â€” proÄŤ je systĂ©m dĹŻvÄ›ryhodnĂ˝</h2>
+
+<p>Tyto zĂˇruky byly ovÄ›Ĺ™eny dlouhodobĂ˝m testovĂˇnĂ­m na ostrĂ©m serveru (2026-06-24):</p>
+
+<h3>Konzistentnost dat â€” Divergence = 0</h3>
+
+<ul>
+<li><strong>Mode 1 (Archive + Delete):</strong> invariant archived == deleted. SmazĂˇno ze zdroje je <strong>pĹ™esnÄ›</strong> to, co se zkopĂ­rovalo do archivu (kontrola probĂ­hĂˇ po kaĹľdĂ© dĂˇvce).</li>
+<li><strong>Mode 0 (Delete only):</strong> smazĂˇnĂ­ bez archivace (vyjimeÄŤnÄ›); pojistka blokuje mazĂˇnĂ­ bez archivnĂ­ kopie, pokud Require archive = true.</li>
+<li><strong>Mode 2 (Copy only):</strong> jen kopie, bez mazĂˇnĂ­. IdempotentnĂ­ â€” re-run nezpĹŻsobĂ­ duplikĂˇty (PK v archivu deduplicira).</li>
+</ul>
+
+<h3>BezpeÄŤnost na zdrojovĂ© DB â€” lock-safe</h3>
+
+<ul>
+<li><strong>VĂ˝bÄ›r kandidĂˇtĹŻ:</strong> NOLOCK hint (0 datovĂ˝ch zĂˇmkĹŻ), bez blokace provozu.</li>
+<li><strong>0 lock-escalacĂ­:</strong> dĂ­ky <code>LOCK_ESCALATION=DISABLE</code> na zdrojovĂ˝ch tabulkĂˇch a omezenĂ˝m batch limitĹŻm; zdrojovĂˇ DB zĹŻstane stabilnĂ­.</li>
+<li><strong>Index integrity:</strong> zdrojovĂˇ DB se nikdy nemÄ›nĂ­ strukturĂˇlnÄ›, jen smazĂˇvajĂ­ data (DELETE, ne ALTER).</li>
+</ul>
+
+<h3>SoubÄ›h bez deadlockĹŻ</h3>
+
+<ul>
+<li><strong>Applock:</strong> dva bÄ›hy stejnĂ©ho mapovĂˇnĂ­ (TIMESTAMP/ANCHOR pĂˇr) jsou seĹ™azeny aplockem; druhĂ˝ se odmĂ­tne, prvnĂ­ bÄ›h bÄ›ĹľĂ­.</li>
+<li><strong>Atomicita dĂˇvky:</strong> selhĂˇnĂ­ v dĂˇvce = rollback celĂ© dĂˇvky; data zĹŻstanou konzistentnĂ­, bÄ›h se opakuje pĹ™Ă­ĹˇtÄ›.</li>
+<li><strong>0 duplikĂˇtĹŻ / double-archiving:</strong> verifikovĂˇno na ~5 M Ĺ™ĂˇdkĹŻ.</li>
+</ul>
+
+<h3>PrĂˇvnĂ­ zĂˇdrĹľka (Legal hold)</h3>
+
+<ul>
+<li>Doklady se prĂˇvnĂ­ zĂˇdrĹľbou jsou vylouÄŤeny z archivace/smazĂˇnĂ­, dokud nejsou uvolnÄ›ny.</li>
+<li>Ăšdaje v archivu zĹŻstanou zachovĂˇny aĹľ do vyprĹˇenĂ­ doby uloĹľenĂ­.</li>
+</ul>
+
+<h3>Ochrana doby retence â€” retention floor</h3>
+
+<ul>
+<li>Pojistka (50210) brĂˇnĂ­ smazĂˇnĂ­ dat mladĹˇĂ­ch, neĹľ je nastavenĂˇ minimĂˇlnĂ­ retence.</li>
+<li>Dry-run je vyjĂ­mka (mĹŻĹľe simulovat, i kdyby poruĹˇil politiku).</li>
+</ul>
+
+<h3>Obnova po pĂˇdu</h3>
+
+<ul>
+<li><strong>Crash-consistency:</strong> pokud se bÄ›h pĹ™eruĹˇĂ­ (kill, vĂ˝padek), rozpracovanĂˇ dĂˇvka se vrĂˇtĂ­ (rollback), ostatnĂ­ data zĹŻstanou netknutĂˇ.</li>
+<li><strong>SirotÄŤĂ­ bÄ›hy:</strong> procedura <code>usp_RecoverStaleRuns</code> oznaÄŤuje bÄ›hy bez heartbeatu jako selhanĂ©; zbytek je resumovatelnĂ˝.</li>
+<li><strong>0 ztracenĂ˝ch/duplikĂˇtnĂ­ch Ĺ™ĂˇdkĹŻ</strong> kvĹŻli pĂˇdu â€” atomicita na Ăşrovni dĂˇvky.</li>
+</ul>
+
+<h3>VĂ˝kon a ĹˇkĂˇlovĂˇnĂ­</h3>
+
+<ul>
+<li><strong>Archiv s PK:</strong> prĹŻchodnost do prĂˇzdnĂ©ho archivu ~9100 Ĺ™ĂˇdkĹŻ/s; do 5M+ velkĂ©ho archivu ~2900 Ĺ™ĂˇdkĹŻ/s (index cost).</li>
+<li><strong>Audit level ROW:</strong> ~21% reĹľie vĂ˝konu (7200 vs 9100 Ĺ™ĂˇdkĹŻ/s), stĂˇle pĹ™ijatelnĂ© pro kritickĂ© procesy.</li>
+<li><strong>Mitigace:</strong> index parking (doÄŤasnĂ© vypnutĂ­ NC indexĹŻ bÄ›hem bÄ›hu, ~1,5Ă— zrychlenĂ­), tuning batch size, partitioning pro 100M+ archivy.</li>
+<li><strong>Archiv PK je povinnĂ˝:</strong> umoĹľĹuje copy-only idempotenci, restore, dedup, duplicate-prevention. KEEP it.</li>
+</ul>
+
+<h2>Kdy kontaktovat administrĂˇtora</h2>
+
+<ul>
+<li>OpakovanĂ© <strong>FAILED</strong> bÄ›hy (vĂ­ce neĹľ 2Ă— za sebou).</li>
+<li>Stav <strong>API OK â‰  true</strong> nebo <strong>DB OK â‰  true</strong>.</li>
+<li>OÄŤekĂˇvanĂˇ data chybÄ›jĂ­ v archivu nebo zĹŻstĂˇvajĂ­ ve zdroji (proveĹ™it Divergence).</li>
+<li>PotĹ™eba zmÄ›nit konfiguraci (retence, procesy, rozvrhy, operĂˇtoĹ™i, indexy, mapy zdrojĹŻ).</li>
+<li>NovĂ˝ proces nebo novĂˇ zdrojovĂˇ DB (konfiguraÄŤnĂ­ pomoc).</li>
+<li>Disk/log prostor se zaplĹuje rychleji, neĹľ ÄŤekĂˇno (tuning nebo archivnĂ­ cleanup).</li>
+<li>Audit nebo compliance dotazy na dohledatelnost dat.</li>
+</ul>
+
+<hr>
+
+<h2>Dodatek: Archivy a vĂ˝kon â€” co vÄ›dÄ›t o nastavenĂ­</h2>
+
+<p><strong>ArchivnĂ­ tabulky majĂ­ primĂˇrnĂ­ klĂ­ÄŤ (stejnĂ˝ jako zdroj).</strong> To je povinnĂ© pro:</p>
+
+<ul>
+<li>Copy-only idempotenci (Mode 2 â€” re-run se neuduplicituje).</li>
+<li>Restore (vrĂˇcenĂ­ dat zpÄ›t bez duplikĂˇtĹŻ).</li>
+<li>Duplicate-prevention (pojistka proti dvojĂ­mu archivovĂˇnĂ­).</li>
+</ul>
+
+<p><strong>VĂ˝kon:</strong> Archiv s velkĂ˝m PK (5M+ Ĺ™ĂˇdkĹŻ) je pomalejĹˇĂ­ neĹľ prĂˇzdnĂ˝ (~3Ă— pomalejĹˇĂ­). NenĂ­ to chyba â€” je to cena indexovanĂ©, dedup-capable archivace. Mitigace:</p>
+
+<ol>
+<li><strong>Index parking</strong> â€” doÄŤasnĂ© vypnutĂ­ NC indexĹŻ bÄ›hem bÄ›hu (~1,5Ă— zrychlenĂ­; ĂşplnÄ› reverzibilnĂ­).</li>
+<li><strong>Batch size tuning</strong> â€” 10kâ€“50k Ĺ™ĂˇdkĹŻ na dĂˇvku (dobrĂ˝ balance).</li>
+<li><strong>Partitioning</strong> â€” pro 100M+ archivy; inserty pak nejsou sekvenÄŤnĂ­ v ÄŤase.</li>
+</ol>
+
+<p><strong>Cutoff time-zone:</strong> Pokud pouĹľijeĹˇ Fixed cutoff date, pamatuj si, Ĺľe se interpretuje jako 00:00:00 <strong>UTC</strong>. EfektivnĂ­ mĂ­stnĂ­ hranice se posouvĂˇ dle ÄŤasu (CET/CEST). Editor ti teÄŹ ukazuje live local boundary. ZĹŻstaĹ na relativnĂ­ retenci (beze TZ matenĂ­).</p>
+
+<p><strong>Config layering:</strong> `arch.Process` = vĂ˝chozĂ­ hodnoty; `arch.ProcessDatabase` = override mapovĂˇnĂ­. Runtime ÄŤte <code>COALESCE(pd.X, p.X)</code> â€” mapovĂˇnĂ­ vĂ­tÄ›zĂ­. Editor teÄŹ ukazuje, kterĂˇ pole jsou pĹ™epsĂˇna (Overrides sloupec).</p>
+</body>
+</html>
