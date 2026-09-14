@@ -299,6 +299,46 @@ measurement — two results are not comparable without it.
 
 ---
 
+## Phase 7b — Reporting
+
+The reporting layer ships **with the core bundle** — there is no separate install.
+It is 20 `arch.usp_Frontend_*` procedures, `arch.usp_Api_EstimateNextRunImpact`
+and six views, and it is driven entirely by `arch.Process` / `arch.ObjectSpec`, so
+it describes whatever is configured without carrying any table names of its own.
+
+Verify it, and prove it answers for the customer's configuration:
+
+```powershell
+sqlcmd -S <SRV> -E -b -I -i sql\50_reporting.sql
+```
+
+| Section | Must show |
+|---|---|
+| `A_SUMMARY` | `ok - reporting layer present` (20 Frontend + 1 Api + 6 views) |
+| `B_VERDICT` | `Failed = 0` — every reporting procedure executed against this schema |
+| `C` | per-set and per-table source vs archive, and go-live readiness |
+| `D` | three output artefacts that look like defects and are not |
+
+`A_SUMMARY` reporting INCOMPLETE means the core bundle did not finish — the
+reporting procedures come with it, so re-run `-Stage deploy`.
+
+### The SSRS dashboard is not a drop-in
+
+`reports\ArchiveManager - DataMovement Dashboard v2.rdl` comes from the product
+repository, but it was last changed **13 days before** the 2.0 cleanup that
+retired two of the procedures it calls, and it was written against a **different
+customer's WMS schema** — it hardcodes `SHIPHIST`, `RF_LOG2` and `DATE_UPLD`.
+
+Executed dataset by dataset against the reference deployment: **6 of 13 work, 4
+are silently wrong, 3 fail outright.** The silently-wrong four are the problem —
+a panel that throws gets fixed, a panel that renders an empty chart gets believed.
+
+Read [`reports/README.md`](reports/README.md) before offering it to a customer. It
+carries the dataset-by-dataset result and the live procedure that replaces each
+panel. Treat the RDL as a layout to rework, not as a finished report.
+
+---
+
 ## Phase 8 — Hand over to the schedule
 
 1. Confirm the Agent job `kArchiveManager - RUN CONFIGURED` is owned correctly
