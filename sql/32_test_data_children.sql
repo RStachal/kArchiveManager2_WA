@@ -20,7 +20,11 @@
 --   t_pick_task_uom on a KEPT pick           -> pick-scoped, same reasoning.
 --
 -- Tags: order KAMT-C%, pick lot_number 'KAMTCHILD', container KAMTC%,
--- cartonization batch KAMTB%. All removed by 99_cleanup_test.sql's KAM% patterns.
+-- cartonization batch KAMTB%. 99_cleanup_test.sql removes them by that tag
+-- directly - NOT via t_pick_detail. A child keyed only by a reference to its
+-- parent cannot be cleaned once the parent row is already gone, which is what
+-- happened before 99 was taught about this table: 660 001 archive rows survived
+-- a cleanup as orphans.
 -- ============================================================================
 :setvar WmsDb "AAD"
 :setvar RetentionDays "90"

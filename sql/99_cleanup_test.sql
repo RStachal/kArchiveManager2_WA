@@ -10,6 +10,8 @@
 --                       t_tran_log         generic_text1 = 'KAMTEST'
 --                       t_pick_detail      lot_number    = 'KAMTEST'
 --                       t_work_q           work_q_id LIKE 'KAMTQ%'
+--                       t_po_master        po_number     LIKE 'KAMPO-%'
+--                       t_pick_container   container_id  LIKE 'KAMTC-%'
 --                       ADV.t_log_message  machine_id    = 'KAMTEST'
 --                     Legacy tags from earlier revisions are included too
 --                     (KAMTEST-%, KAMDOC-%, KAMSTD, KAMTESTQ%, KAMSTDQ%).
@@ -96,11 +98,21 @@ BEGIN
                                  OR inbound_order_number  LIKE N''KAMT-%'' OR inbound_order_number  LIKE N''KAMTEST-%'';
 
     -- pick set
+    -- t_pick_task_uom (added by 26) must go before its parent
+    DELETE FROM dbo.t_pick_task_uom WHERE cartonization_batch_id LIKE N''KAMTB%'' OR pick_id IN (SELECT pick_id FROM dbo.t_pick_detail WHERE lot_number IN (N''KAMTEST'', N''KAMSTD'', N''KAMTCHILD'') OR order_number LIKE N''KAMT-%'');
     DELETE FROM dbo.t_allocation  WHERE pick_id IN (SELECT pick_id FROM dbo.t_pick_detail WHERE lot_number IN (N''KAMTEST'', N''KAMSTD''));
     DELETE FROM dbo.t_pick_detail WHERE lot_number IN (N''KAMTEST'', N''KAMSTD'');
     DELETE FROM dbo.t_pick_detail WHERE order_number LIKE N''KAMT-%'' OR order_number LIKE N''KAMTEST-%'' OR order_number LIKE N''KAMDOC-%'';
 
+    -- purchase-order set (added by 27; children first)
+    DELETE FROM dbo.t_rcpt_ship_po      WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM dbo.t_po_detail_comment WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM dbo.t_po_comment        WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM dbo.t_po_detail         WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM dbo.t_po_master         WHERE po_number LIKE N''KAMPO-%'';
+
     -- order set (deepest child first; the cascade would take most of them anyway)
+    DELETE FROM dbo.t_pick_container       WHERE container_id LIKE N''KAMTC-%'' OR order_number LIKE N''KAMT-%'' OR order_number LIKE N''KAMTEST-%'' OR order_number LIKE N''KAMDOC-%'';
     DELETE FROM dbo.t_pack                 WHERE order_number LIKE N''KAMT-%'' OR order_number LIKE N''KAMTEST-%'' OR order_number LIKE N''KAMDOC-%'';
     DELETE FROM dbo.t_order_detail_comment WHERE order_number LIKE N''KAMT-%'' OR order_number LIKE N''KAMTEST-%'' OR order_number LIKE N''KAMDOC-%'';
     DELETE FROM dbo.t_order_comment        WHERE order_number LIKE N''KAMT-%'' OR order_number LIKE N''KAMTEST-%'' OR order_number LIKE N''KAMDOC-%'';
@@ -123,11 +135,18 @@ BEGIN
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_tran_log_sn          WHERE tran_log_id IN (SELECT tran_log_id FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_tran_log WHERE generic_text1 IN (N''KAMTEST'', N''KAMSTD''));
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_tran_log             WHERE generic_text1 IN (N''KAMTEST'', N''KAMSTD'') OR outbound_order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_allocation           WHERE pick_id IN (SELECT pick_id FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_pick_detail WHERE lot_number IN (N''KAMTEST'', N''KAMSTD''));
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_pick_task_uom        WHERE cartonization_batch_id LIKE N''KAMTB%'' OR lot_number = N''KAMTCHILD'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_pick_detail          WHERE lot_number IN (N''KAMTEST'', N''KAMSTD'') OR order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_pack                 WHERE order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_order_detail_comment WHERE order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_order_comment        WHERE order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_order_detail         WHERE order_number LIKE N''KAM%-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_pick_container       WHERE container_id LIKE N''KAMTC-%'' OR order_number LIKE N''KAM%-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_rcpt_ship_po         WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_po_detail_comment    WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_po_comment           WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_po_detail            WHERE po_number LIKE N''KAMPO-%'';
+    DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_po_master            WHERE po_number LIKE N''KAMPO-%'';
     DELETE FROM ' + QUOTENAME(N'$(WmsDb)') + N'.t_order                WHERE order_number LIKE N''KAM%-%'';
     DELETE FROM ' + QUOTENAME(N'$(AdvDb)') + N'.t_log_message          WHERE machine_id = N''KAMTEST'';';
     EXEC sys.sp_executesql @arc;

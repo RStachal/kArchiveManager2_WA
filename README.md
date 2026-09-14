@@ -11,6 +11,10 @@ executed on that instance; the notes below record what actually happened.
 runbook — eight phases with a stop condition on each, plus 7b (reporting) and 7c
 (the console). This file explains *why* the configuration looks the way it does.
 
+**Showing it to an audience: follow [PRESENTATION.md](PRESENTATION.md).** The demo
+script, the measured numbers, and the four places a live walkthrough goes wrong —
+including a job that fails one second after it starts unless `55` has been run.
+
 **The Admin Console** (the web UI, an IIS application) ships in the customer
 handover package, not here — but it is deployed and verified on this server at
 `http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the six
@@ -587,7 +591,8 @@ Size the first production run from a measurement, not from this README.
 | `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
 | `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
 | `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |
-| `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches). Always restores the performance-test baseline |
+| `55_fix_prep_job_owner.sql` | opt-in | Re-owns `PREP CONFIGURED` to the runner login. Without it the PREP job **fails every time it is started** — it carries the runner privilege gate but `054` re-owns only `RUN CONFIGURED`, so the gate evaluates a sysadmin and refuses. Evaluates the gate as the runner first |
+| `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches). Always restores the performance-test baseline. Covers all 21 configured tables — the PO family and the two children added by `26`/`27` were missing until 2026-09-14 |
 
 ---
 

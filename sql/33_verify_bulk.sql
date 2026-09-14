@@ -146,6 +146,18 @@ GO
    =========================================================================== */
 PRINT '';
 PRINT '=== C) Gate violations in the ARCHIVE. Every count must be 0. ===';
+PRINT 'RUN THIS ONLY WHEN NOTHING IS IN FLIGHT. arch.WorkBatch must hold no';
+PRINT 'Running and no Paused row, and no RUN job may be executing. The two';
+PRINT 'child checks below ("container only for an archived order",';
+PRINT '"task_uom only for an archived pick") ask whether an archived CHILD';
+PRINT 'still has its parent in the source. ANCHOR deletes the anchor LAST, so';
+PRINT 'mid-batch that is the NORMAL state, not a violation - the children are';
+PRINT 'already archived and the parent has not been reached yet. Measured on';
+PRINT 'the reference instance while an ORDER batch was interrupted: 15 012,';
+PRINT 'then 11 097, then 0 as the batches completed. Nothing was wrong.';
+PRINT 'Section B says a remainder across runs is expected; this is the same';
+PRINT 'fact seen from the archive side. Let the run finish, or resume the';
+PRINT 'paused batches, before believing a non-zero count here.';
 GO
 DECLARE @Cut datetime2(0) = DATEADD(MINUTE, -1440, DATEADD(DAY, -$(RetentionDays), CONVERT(datetime2(0), SYSUTCDATETIME())));
 DECLARE @Tz nvarchar(200) = N'$(SourceTimezone)';
@@ -316,5 +328,6 @@ GO
 
 PRINT '';
 PRINT '33_verify_bulk: done. Read section C first - it is the "only the';
-PRINT 'configured rows" test, and every count in it must be 0.';
+PRINT 'configured rows" test, and every count in it must be 0 - but only once';
+PRINT 'the run has finished. See the note printed above section C.';
 GO
