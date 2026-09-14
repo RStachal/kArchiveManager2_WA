@@ -8,12 +8,14 @@ against `AAD` (394 tables) and `ADV` (47 tables). Every script here has been
 executed on that instance; the notes below record what actually happened.
 
 **Deploying at a customer site: follow [DEPLOYMENT.md](DEPLOYMENT.md).** It is the
-runbook — eight phases with a stop condition on each. This file explains *why* the
-configuration looks the way it does.
+runbook — eight phases with a stop condition on each, plus 7b (reporting) and 7c
+(the console). This file explains *why* the configuration looks the way it does.
 
 **The Admin Console** (the web UI, an IIS application) ships in the customer
-handover package, not here. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records three
-corrections its own documentation needs, and what is still missing on this server.
+handover package, not here — but it is deployed and verified on this server at
+`http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the six
+corrections it needed before it would run, three of them permission gaps the
+shipped scripts do not close, two of which fail silently.
 
 ---
 
@@ -835,12 +837,19 @@ about; the first is faster but makes one run hold locks for longer.
 
 ## Not in this package
 
-- **Admin Console / IIS** — console, app-pool principal and operator seed
-  (`v2\061–066`, `deploy\v2\32/34/35/51/59`). Database runtime only.
-- **Alerting and archive backups** — `047` (Database Mail) and `048` (FULL+LOG
-  jobs) need an SMTP server and a backup path. Go-live readiness reports both as
-  WARN until done. **The archive backup is not optional**: that database is the
-  only copy of rows deleted irreversibly from the source.
+- **Admin Console / IIS** — the console binaries, app-pool principal and operator
+  seed (`v2\061–066`, `deploy\v2\32/34/35/51/59`) come from the handover package.
+  This package is the database runtime only. It *is* deployed on the reference
+  server, and everything that took to get there is in
+  [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md).
+- **Alerting** — `047` (Database Mail, operator, job failure notification) needs
+  an SMTP server. Not applied on the reference server, which has none; it is the
+  single remaining go-live WARN there. On a customer system, apply it.
+- **Archive backups** — `048` (FULL + LOG jobs) is **applied** on the reference
+  server: FULL daily 01:30, LOG hourly, both proven by a real run. **This is not
+  optional anywhere**: `kArchiveManagerBackups` is the only copy of rows deleted
+  irreversibly from the source. It needs a backup path, so it stays a per-site
+  step.
 - **Enabling the scheduled job** — `kArchiveManager - RUN CONFIGURED` ships
   DISABLED and stays that way. Enable it only after a successful capped real run.
   It hardcodes the `JOB_DEFAULT` profile, which `04_seed_order.sql` creates.

@@ -339,6 +339,29 @@ panel. Treat the RDL as a layout to rework, not as a finished report.
 
 ---
 
+## Phase 7c — Admin Console (optional, but expect a day of it)
+
+The console is the customer-facing UI for everything above: dashboard,
+configuration, validation, run history, document lookup and the go-live gate. It
+ships in the handover package as an IIS application and it does **not** run as
+shipped.
+
+Six things in it contradict its own documentation — a native driver asset the
+publish never declares, a `.exe` that does not exist, the wrong target framework
+in two documents, and three permission gaps the shipped scripts do not close. Two
+of the three fail **silently**: `databaseOk: false` with `missingRoles: []`, and a
+login box that rejects a correct password while reporting nothing.
+
+Every one of them is written up, with the reproduction and the fix, in
+[`ADMIN-CONSOLE.md`](ADMIN-CONSOLE.md). Work through its **Deployment order**
+section; do not follow the handover IIS runbook alone.
+
+The one rule worth repeating here: **verify as the app-pool identity.** Running
+the console with Kestrel under an interactive sysadmin account passes every check
+and proves nothing — all three permission gaps are invisible that way.
+
+---
+
 ## Phase 8 — Hand over to the schedule
 
 1. Confirm the Agent job `kArchiveManager - RUN CONFIGURED` is owned correctly
