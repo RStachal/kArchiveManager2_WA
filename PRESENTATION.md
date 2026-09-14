@@ -56,7 +56,7 @@ EXEC arch.usp_ValidateConfiguration;          -- returns 0, one known WARN (belo
 -- 2. nothing is in flight
 SELECT Status, COUNT(*) FROM arch.WorkBatch GROUP BY Status;   -- no Running, no Paused
 
--- 3. the PREP job can actually run   <-- see the blocker below
+-- 3. the jobs are owned by the runner, not a sysadmin (else PREP fails 51001)
 SELECT name, SUSER_SNAME(owner_sid) FROM msdb.dbo.sysjobs WHERE name LIKE 'kArchiveManager%';
 
 -- 4. the console answers
@@ -65,34 +65,52 @@ SELECT name, SUSER_SNAME(owner_sid) FROM msdb.dbo.sysjobs WHERE name LIKE 'kArch
 
 ---
 
-## One blocker you must fix first
+## The blocker that used to be here — fixed on this instance
 
-**`kArchiveManager - PREP CONFIGURED` fails one second after it starts.** If you
-demonstrate the jobs without fixing this, the first thing the audience sees is a
-red cross.
+**`kArchiveManager - PREP CONFIGURED` used to fail one second after it started**,
+so the first thing an audience saw was a red cross:
 
 ```
 Step 1 VALIDATE CONFIGURATION  FAILED
 kArchiveManager runner privilege gate failed. See arch.usp_VerifyRunnerPrivileges.
-[SQLSTATE 42000] (Error 51001)
+[SQLSTATE 42000] (Error 51001)  -- executed as NT AUTHORITY\SYSTEM
 ```
 
-The job is owned by a sysadmin. Its step 1 runs `arch.usp_VerifyRunnerPrivileges`,
-which exists precisely to refuse a sysadmin runner — so the gate is right and the
-job is wrong. The shipped add-on `054_runner_job_least_privilege.sql` re-owns only
-`RUN CONFIGURED` (its `@JobNameLike` default is that exact name), and `PREP`
-carries the identical gate while keeping whatever login deployed it.
+The job was owned by a sysadmin. Its step 1 runs `arch.usp_VerifyRunnerPrivileges`,
+which exists precisely to refuse a sysadmin runner — the gate was right and the job
+was wrong. The shipped add-on `054_runner_job_least_privilege.sql` re-owns only
+`RUN CONFIGURED` (its `@JobNameLike` default is that exact name), and `PREP` carries
+the identical gate while keeping whatever login deployed it.
 
-Fix, then prove it:
+**Applied on this instance on 2026-09-14.** All five jobs now run as they should:
+
+| Job | Owner | Started | Outcome |
+|---|---|---|---|
+| PREP CONFIGURED | `karch_runtime_svc` | manually | both steps **SUCCEEDED**, 5 batches prepared |
+| RUN CONFIGURED | `karch_runtime_svc` | manually | step 1 SUCCEEDED, step 2 archived and deleted, cancelled on request |
+| RECOVER STALE RUNS | `karch_runtime_svc` | manually **and on its own schedule** | SUCCEEDED |
+| BACKUP ARCHIVE DB (FULL) | sysadmin | manually | SUCCEEDED, verified |
+| BACKUP ARCHIVE DB (LOG) | sysadmin | manually **and on its own schedule** | SUCCEEDED, 249 464 pages |
+
+If you are on a different instance:
 
 ```
-sql/55_fix_prep_job_owner.sql      set @Apply = 1, run as sysadmin
+sql/56_agent_jobs.sql              building a new instance - creates all five jobs
+sql/55_fix_prep_job_owner.sql      repairing an existing one - re-owns PREP only
+```
+
+Either way, prove it rather than assuming — the failure costs one second, so it is
+cheap to test:
+
+```sql
 EXEC msdb.dbo.sp_start_job @job_name = N'kArchiveManager - PREP CONFIGURED';
+-- then read msdb.dbo.sysjobhistory: step 1 must say SUCCEEDED, and
+-- "Executed as user: <the runner>", not NT AUTHORITY\SYSTEM.
 ```
 
-Section B of that script evaluates the gate **as the runner** before you change
-anything: it must print `GateReturnCode 0`. If it does not, re-owning the job only
-moves the failure.
+Section B of `55` evaluates the gate **as the runner** before changing anything: it
+must print `GateReturnCode 0`. If it does not, re-owning the job only moves the
+failure somewhere less obvious.
 
 ---
 
@@ -314,7 +332,7 @@ withheld by default and a DBA has to make that call deliberately.
 
 | Symptom | Cause | Do this |
 |---|---|---|
-| PREP fails instantly, Error 51001 | job owned by a sysadmin | `sql/55_fix_prep_job_owner.sql` |
+| PREP fails instantly, Error 51001 | job owned by a sysadmin | `sql/55_fix_prep_job_owner.sql`, or `56` on a new instance |
 | Stop appears to do nothing | it stopped the run, not the job | `sp_stop_job` |
 | A run sits at `RUNNING` forever | worker killed mid-batch | `usp_RecoverStaleRuns @StaleAfterMinutes = 0` |
 | Dashboard shows many failed batches | dry-run previews close as `Failed` | read `arch.WorkBatch.Notes` |
