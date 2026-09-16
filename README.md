@@ -681,6 +681,7 @@ Size the first production run from a measurement, not from this README.
 | `30_test_data_all.sql` | **yes** (test rows) | Test data for all five sets, both directions |
 | `22_simulate_job.sql` | **DELETES** if `RunForReal=1` | Replays both Agent job steps, impersonating the runner login |
 | `23_verify_standalone.sql` | no | Run log, reconciliation, FK-children check, orphan check, remaining eligible, health |
+| `10_dryrun.sql` | no | Dry pass over the configured processes — selects candidates and reports what would move, writing nothing. Note that a successful dry-run WorkBatch is closed with `Status = 'Failed'` by `arch.usp_CloseDryRunWorkBatches`; the `Notes` column says why |
 | `11_realrun_guarded.sql` | **DELETES** | Capped run with a pre-run baseline; blocked unless `IConfirm=YES` |
 | `12_verify.sql` | no | Baseline reconciliation for the order/work-queue pair |
 | `13_restore.sql` | opt-in | Restore from archive |

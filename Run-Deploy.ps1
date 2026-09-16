@@ -23,9 +23,15 @@
       precheck  - 01 only (read-only, safe anywhere)
       analyse   - 01, 03, and 09 if configuration already exists (read-only)
       deploy    - 02 + the core bundle + verify + selftest + variant tests
-      configure - 04, 05, 06, 07 (configuration and archive provisioning)
-      test      - 09, 10 (pre-flight and dry run; NO deletes)
+      configure - 03, then the six document sets (04, 05, 20, 24, 25, 26, 27),
+                  then 08 index report, 06 provisioning, 07 validation
+      runtime   - prints the manual steps for the runner login and the Agent jobs
+      test      - 09, test data (30, 31, 32), a dry pass (22), then the
+                  read-only verdicts 33 and 50. NO deletes.
       realrun   - 11, 12 (DELETES DATA - requires -IConfirm)
+      perf      - 40, 41 (throughput measurement; DELETES)
+      perfrestore - 42 (undoes what 40/41 changed outside their test data)
+      cleanup   - 99 (removes the test footprint; requires -IConfirm)
       all       - deploy, configure, test  (stops before realrun on purpose)
 
 .EXAMPLE
@@ -62,8 +68,20 @@ param(
     [string] $OrderProcessCode = 'AAD_ORDER_ARCH',
     [string] $WorkQProcessCode = 'AAD_WORKQ_ARCH',
 
-    # Folder that contains Databases\, kArchiveManagerAdmin\ and deploy\.
-    [string] $RepoRoot = 'C:\Users\admin\source\repos\WMSArchiveManager\legacy\ArchiveManager1.0',
+    # WHERE THE PRODUCT IS.
+    #
+    # Leave this empty and the script uses the copy vendored in this package, at
+    # kAM2\01-database - which is the normal case and makes the package
+    # self-contained: clone it, run it, no second checkout required.
+    #
+    # Set it only when you are working from the vendor's own source repository,
+    # where the layout differs: the bundle sits in deploy\v2\release-package\ and
+    # its includes resolve against the repo root rather than a source-objects\
+    # folder. Pass the ArchiveManager1.0 folder in that case.
+    #
+    # It used to default to a developer's local path, which meant -Stage deploy
+    # could not work on any other machine.
+    [string] $RepoRoot = '',
 
     [ValidateSet('precheck','analyse','deploy','configure','runtime','test','realrun','perf','perfrestore','cleanup','all')]
     [string] $Stage = 'precheck',
@@ -83,6 +101,34 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# ---------------------------------------------------------------------------
+# Resolve where the product lives, and with it the three paths that differ
+# between the two layouts. Auto-detect rather than ask, because the vendored
+# copy is right for everyone except whoever is editing the product itself.
+#
+#   vendored (this package)        legacy (vendor source repo)
+#   kAM2\01-database\              <RepoRoot>\deploy\v2\release-package\   bundle + test packs
+#   kAM2\01-database\source-objects <RepoRoot>                            $(Root) for the :r includes
+#   kAM2\01-database\operational-add-ons                                  the parameterised add-ons
+# ---------------------------------------------------------------------------
+$vendored = Join-Path $PSScriptRoot 'kAM2\01-database'
+
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    if (-not (Test-Path (Join-Path $vendored 'deploy_clean_v2_full.sql'))) {
+        throw "The vendored product is missing at $vendored. Either restore kAM2\ or pass -RepoRoot pointing at the ArchiveManager1.0 folder of the vendor repository."
+    }
+    $BundleDir  = $vendored
+    $IncludeDir = Join-Path $vendored 'source-objects'
+    $AddOnDir   = Join-Path $vendored 'operational-add-ons'
+    $LayoutName = 'vendored (kAM2\01-database)'
+}
+else {
+    $BundleDir  = Join-Path $RepoRoot 'deploy\v2\release-package'
+    $IncludeDir = $RepoRoot
+    $AddOnDir   = Join-Path $RepoRoot 'deploy\v2'
+    $LayoutName = "vendor repository ($RepoRoot)"
+}
 
 # ---------------------------------------------------------------------------
 # Locate sqlcmd
@@ -188,13 +234,16 @@ $sqlDir = Join-Path $PSScriptRoot 'sql'
 # because sqlcmd will not substitute a variable inside a quoted :r path.
 # ---------------------------------------------------------------------------
 function Invoke-CoreBundle {
-    $master = Join-Path $RepoRoot 'deploy\v2\release-package\deploy_clean_v2_full.sql'
-    if (-not (Test-Path $master)) { throw "Core bundle not found at $master. Set -RepoRoot to the ArchiveManager1.0 folder." }
+    $master = Join-Path $BundleDir 'deploy_clean_v2_full.sql'
+    if (-not (Test-Path $master)) { throw "Core bundle not found at $master. Layout in use: $LayoutName." }
 
     $text = Get-Content -LiteralPath $master -Raw -Encoding UTF8
-    # Drop the in-file Root declaration and hardcode the path everywhere.
+    # Drop the in-file Root declaration and hardcode the path everywhere. The
+    # includes are "$(Root)\Databases\..." and "$(Root)\kArchiveManagerAdmin\...",
+    # which live under source-objects\ in the vendored copy and at the repo root
+    # in the vendor's own layout - hence $IncludeDir rather than the bundle dir.
     $text = [regex]::Replace($text, '(?m)^:setvar\s+Root\s+"[^"]*"\s*$', '-- :setvar Root removed by Run-Deploy.ps1 (paths expanded below)')
-    $text = $text.Replace('$(Root)', $RepoRoot)
+    $text = $text.Replace('$(Root)', $IncludeDir)
 
     $run = Join-Path $WorkDir 'deploy_clean_v2_full.RUN.sql'
     [System.IO.File]::WriteAllText($run, $text, (New-Object System.Text.UTF8Encoding $true))
@@ -209,7 +258,7 @@ function Invoke-CoreBundle {
     }
     if ($missing.Count -gt 0) {
         $missing | ForEach-Object { Write-Host "    MISSING INCLUDE: $_" -ForegroundColor Red }
-        throw "$($missing.Count) include file(s) missing - check -RepoRoot."
+        throw "$($missing.Count) include file(s) missing under $IncludeDir. Layout in use: $LayoutName."
     }
 
     $log = Join-Path $LogDir 'core_deploy.log'
@@ -221,7 +270,7 @@ function Invoke-CoreBundle {
     }
     Write-Host "    OK - $log" -ForegroundColor Green
 
-    $rp = Join-Path $RepoRoot 'deploy\v2\release-package'
+    $rp = $BundleDir
     foreach ($f in @('verify_clean_deploy.sql', 'selftest_acceptance.sql', 'variant_test_pack.sql')) {
         $src = Join-Path $rp $f
         $lg  = Join-Path $LogDir ($f -replace '\.sql$', '.log')
@@ -266,32 +315,63 @@ switch ($Stage) {
         Invoke-SqlFile (Join-Path $sqlDir '20_seed_standalone.sql')       # tran-log + pick sets
         Invoke-SqlFile (Join-Path $sqlDir '24_seed_logmessage_anchor.sql')# ADV application log
         Invoke-SqlFile (Join-Path $sqlDir '25_seed_document_sets.sql')    # header>detail shaping + RunOrder
+        # 26 and 27 were missing from this stage until 2026-09-16 while
+        # DEPLOYMENT.md already claimed the stage ran them. A deployment that
+        # followed the runbook therefore came out WITHOUT the purchase-order set
+        # and without the three FK children of t_order - and an ORDER run on real
+        # customer data then fails on the foreign key, which is exactly how it
+        # failed on the reference instance. They must come before 06, so the
+        # archive tables for their objects get provisioned.
+        Invoke-SqlFile (Join-Path $sqlDir '26_add_pick_order_children.sql') # pick + order FK children
+        Invoke-SqlFile (Join-Path $sqlDir '27_seed_po_set.sql')            # inbound purchase-order set
         # 08 is a READ-ONLY report. We never create indexes in a WMS database -
         # it hands the DDL to the schema owner instead. There is no Apply switch.
         Invoke-SqlFile (Join-Path $sqlDir '08_source_indexes.sql')
         Invoke-SqlFile (Join-Path $sqlDir '06_provision.sql')
         Invoke-SqlFile (Join-Path $sqlDir '07_validate.sql')
+        Write-Host ""
+        Write-Host "Check the FK_COMPLETE_ORDER block 26 printed: every table with a" -ForegroundColor Yellow
+        Write-Host "foreign key into t_order must say 'yes'. A MISSING there is a run-time" -ForegroundColor Yellow
+        Write-Host "failure later, and 07_validate does NOT check it." -ForegroundColor Yellow
     }
 
     'runtime' {
         Write-Host "The runner principal and job ownership come from the product's own" -ForegroundColor Yellow
         Write-Host "parameterized scripts, which need a password and are therefore manual:" -ForegroundColor Yellow
-        Write-Host "  1) $RepoRoot\deploy\v2\053_runtime_least_privilege_principal.sql" -ForegroundColor Yellow
+        Write-Host "  1) $AddOnDir\053_runtime_least_privilege_principal.sql" -ForegroundColor Yellow
         Write-Host "     set @SourceDbsCsv = '$SourceDb,$AdvDb', a strong @SqlPassword, @Apply = 1" -ForegroundColor Yellow
-        Write-Host "  2) $RepoRoot\deploy\v2\054_runner_job_least_privilege.sql   @Apply = 1" -ForegroundColor Yellow
+        Write-Host "  2) sql\56_agent_jobs.sql   @Apply = 1" -ForegroundColor Yellow
+        Write-Host "     Creates all five Agent jobs with both runner jobs owned correctly." -ForegroundColor Yellow
+        Write-Host "     Use it INSTEAD of 054: 054 re-owns only RUN CONFIGURED, so PREP keeps" -ForegroundColor Yellow
+        Write-Host "     the deploying login, its own privilege gate refuses a sysadmin, and the" -ForegroundColor Yellow
+        Write-Host "     job then fails on every start with Error 51001." -ForegroundColor Yellow
+        Write-Host "     On an instance already built with 054, run sql\55_fix_prep_job_owner.sql." -ForegroundColor Yellow
         Write-Host "" -ForegroundColor Yellow
         Write-Host "RE-RUN 053 AFTER ANY CONFIGURATION CHANGE that adds a table: it grants" -ForegroundColor Yellow
         Write-Host "only on the tables mapped at the time it ran. Skipping that gives" -ForegroundColor Yellow
         Write-Host "'SELECT permission was denied' at run time." -ForegroundColor Yellow
+        Write-Host "AND AFTER ANY RESTORE of a source database: a restore replaces every" -ForegroundColor Yellow
+        Write-Host "database principal, so the runner and the console both lose their users" -ForegroundColor Yellow
+        Write-Host "and nothing warns you. Re-run 053, then 051 for the console." -ForegroundColor Yellow
     }
 
     'test' {
         Invoke-SqlFile (Join-Path $sqlDir '09_preflight_data.sql')
         Invoke-SqlFile (Join-Path $sqlDir '30_test_data_all.sql')
+        # 31 and 32 cover the sets 30 does not: the purchase-order family and the
+        # children added by 26. Without them the test stage exercised four of the
+        # six sets and reported success.
+        Invoke-SqlFile (Join-Path $sqlDir '31_test_data_po.sql')
+        Invoke-SqlFile (Join-Path $sqlDir '32_test_data_children.sql')
         Invoke-SqlFile (Join-Path $sqlDir '22_simulate_job.sql') -Overrides @{ 'RunForReal' = '0' }
+        # Read-only verdict on whatever has been archived so far. Harmless on a
+        # dry pass - it simply reports zero movement.
+        Invoke-SqlFile (Join-Path $sqlDir '33_verify_bulk.sql') -Database $AdminDb -AllowFailure
+        Invoke-SqlFile (Join-Path $sqlDir '50_reporting.sql')    -Database $AdminDb -AllowFailure
         Write-Host ""
         Write-Host "Pre-flight, test data and a dry pass are done - NOTHING was deleted." -ForegroundColor Yellow
-        Write-Host "Review $LogDir, then run -Stage realrun -IConfirm." -ForegroundColor Yellow
+        Write-Host "Read 33_verify_bulk's section C (gates) and D (orphans) in $LogDir," -ForegroundColor Yellow
+        Write-Host "then run -Stage realrun -IConfirm." -ForegroundColor Yellow
     }
 
     'realrun' {

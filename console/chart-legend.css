@@ -103,3 +103,20 @@
    hovered. A table drained to zero would then draw a sliver that reads as
    "a little left", which is precisely the thing the chart must not say. A row
    at zero has no bar and no tooltip, and that is the honest rendering. */
+
+/* --- 3. drop the developer note from the first chart ------------------- *
+   The bundle renders  <span>Inspired by SSRS chartProcessSummary</span>  in that
+   card's header. It is a note-to-self about where the layout came from and it
+   means nothing to a customer looking at their own data.
+
+   Hidden positionally, because CSS cannot select on text: it is the FIRST card
+   in .dashboard-chart-grid, and the grid is built in a fixed order -
+   Source vs Archived, then Difference by table, then Recent run status. The
+   second card's note ("Source - archived") is genuinely useful and is kept.
+
+   If a future build reorders those cards this rule hides the wrong note, which
+   is the cost of not editing the JS bundle. The real fix is to drop the string
+   at source.                                                                */
+.dashboard-chart-grid > .chart-card:first-child .chart-card-header > span {
+  display: none;
+}
