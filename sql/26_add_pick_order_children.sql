@@ -231,6 +231,57 @@ BEGIN
             @ConfigChangeSetId        = @Cs2 OUTPUT;
         PRINT '  ' + @tbl + ': added at DeleteOrder ' + CONVERT(varchar(4), @ord) + ' (ObjectSpecId ' + CONVERT(varchar(10), @Os2) + ').';
     END;
+
+    -- Register the JOIN index requirement either way - including for a table that
+    -- was already configured, since an earlier revision added these three without
+    -- one. DETECT whether a supporting index exists rather than asserting it: the
+    -- reference schema happens to have (wh_id, order_number) leading on all three,
+    -- but a customer site may not, and the delete join would then scan the table
+    -- once per batch. We never create the index - the house rule holds - we record
+    -- the requirement so the console shows it and the DBA can act.
+    IF OBJECT_ID(QUOTENAME(N'$(WmsDb)') + N'.dbo.' + QUOTENAME(@tbl), N'U') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM arch.IndexRequirement ir JOIN arch.Process p ON p.ProcessId = ir.ProcessId
+                       WHERE p.ProcessCode = @PcOrder2 AND ir.SourceTable = @tbl AND ir.RequirementType = N'JOIN')
+    BEGIN
+        DECLARE @idxName sysname, @idxNote nvarchar(1000), @IrOs int = NULL;
+        DECLARE @probe nvarchar(max) = N'
+            SELECT TOP 1 @n = i.name
+            FROM ' + QUOTENAME(N'$(WmsDb)') + N'.sys.indexes i
+            WHERE i.object_id = OBJECT_ID(N''' + N'$(WmsDb)' + N'.dbo.' + @tbl + N''')
+              AND i.type > 0
+              AND EXISTS (SELECT 1 FROM ' + QUOTENAME(N'$(WmsDb)') + N'.sys.index_columns ic
+                          JOIN ' + QUOTENAME(N'$(WmsDb)') + N'.sys.columns c
+                            ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                          WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id
+                            AND ic.is_included_column = 0 AND ic.key_ordinal = 1 AND c.name = N''wh_id'')
+              AND EXISTS (SELECT 1 FROM ' + QUOTENAME(N'$(WmsDb)') + N'.sys.index_columns ic
+                          JOIN ' + QUOTENAME(N'$(WmsDb)') + N'.sys.columns c
+                            ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                          WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id
+                            AND ic.is_included_column = 0 AND ic.key_ordinal = 2 AND c.name = N''order_number'');';
+        SET @idxName = NULL;
+        EXEC sys.sp_executesql @probe, N'@n sysname OUTPUT', @n = @idxName OUTPUT;
+
+        SET @idxNote = CASE
+            WHEN @idxName IS NOT NULL
+                THEN N'Satisfied by ' + @idxName + N' - (wh_id, order_number) is its leading prefix, so the delete join seeks. No index is needed from the schema owner.'
+            ELSE N'MISSING - no index on this table leads with (wh_id, order_number), so the delete join will scan it once per batch. Suggested for the schema owner: CREATE NONCLUSTERED INDEX IX_' + @tbl + N'_wh_order ON dbo.' + @tbl + N' (wh_id, order_number). NEVER created by this package - see the house rule in 08_source_indexes.sql.'
+            END;
+
+        EXEC arch.usp_Api_SaveIndexRequirement
+            @IndexRequirementId = @IrOs OUTPUT,
+            @ProcessCode        = @PcOrder2,
+            @RequestedBy        = @By2,
+            @ChangeReason       = @Rsn2,
+            @RequirementType    = N'JOIN',
+            @SourceSchema       = N'dbo',
+            @SourceTable        = @tbl,
+            @KeyColumnsCsv      = N'wh_id,order_number',
+            @IsMandatory        = 0,
+            @Notes              = @idxNote,
+            @ConfigChangeSetId  = @Cs2 OUTPUT;
+        PRINT '  ' + @tbl + ': index requirement recorded - ' + CASE WHEN @idxName IS NOT NULL THEN N'satisfied by ' + @idxName ELSE N'*** MISSING, hand to the DBA ***' END;
+    END;
     FETCH NEXT FROM cKids INTO @tbl, @ord;
 END;
 CLOSE cKids; DEALLOCATE cKids;

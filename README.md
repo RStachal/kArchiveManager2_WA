@@ -839,6 +839,23 @@ reads the validation to ignore warnings. `24_seed_logmessage_anchor.sql` now
 removes any requirement whose columns are genuinely absent, verified against the
 source catalogue.
 
+**The same applies when a table leaves a set.** `arch.IndexRequirement` rows do
+not follow the `ObjectSpec` out, so removing a table leaves the console's index
+panel asking the DBA for an index on something this configuration no longer
+touches — and leaves the next reader taking the requirement as evidence the table
+is still configured. `57_order_set_container_family.sql` deletes both, in one
+transaction, with both recorded in the same `ConfigChangeSet`.
+
+**And a table added without one is the opposite failure.** The three FK children
+added to the ORDER set on 2026-09-15 had no requirement at all, so nothing would
+have told anyone if a customer site lacked the index and the delete join scanned
+the table once per batch. `26` section 1b now **detects** whether an index leads
+with `(wh_id, order_number)` and records `satisfied by <name>` or `MISSING` from
+what it finds, rather than asserting either. On the reference schema all three are
+satisfied — `i_container_master_2`, `i_order_status_key_2`,
+`i_geek_pick_order_key_2` — which is exactly the kind of thing that is true here
+and may not be true anywhere else.
+
 **`OUTPUT` cannot contain a subquery** (`Msg 10705`) and cannot reference a joined
 table — only the target row and `inserted`/`deleted`. Capture the bare facts and
 join afterwards.

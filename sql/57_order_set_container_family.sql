@@ -159,8 +159,26 @@ DELETE o
 FROM arch.ObjectSpec o
 WHERE o.ProcessId = @pid
   AND o.SourceTable IN (N't_container_detail', N't_container_station', N't_pick_container');
+DECLARE @specs int = @@ROWCOUNT;
 
-SELECT Section = 'C_APPLIED', RowsRemoved = @@ROWCOUNT, ConfigChangeSetId = @cs;
+-- arch.IndexRequirement rows do NOT follow the ObjectSpec out. Left behind they
+-- are worse than untidy: the console's index panel keeps asking the DBA for an
+-- index on a table this configuration no longer touches, and a later reader takes
+-- the requirement as evidence the table is still in the set.
+INSERT arch.ConfigChangeItem (ConfigChangeSetId, EntityType, EntityKey, Operation, ObjectId, CreatedAtUtc)
+SELECT @cs, N'IndexRequirement',
+       @ProcessCode + N'|' + ir.RequirementType + N'|' + ir.SourceSchema + N'.' + ir.SourceTable + N'|' + ir.KeyColumnsCsv,
+       N'DELETE', ir.IndexRequirementId, SYSUTCDATETIME()
+FROM arch.IndexRequirement ir
+WHERE ir.ProcessId = @pid
+  AND ir.SourceTable IN (N't_container_detail', N't_container_station', N't_pick_container');
+
+DELETE ir
+FROM arch.IndexRequirement ir
+WHERE ir.ProcessId = @pid
+  AND ir.SourceTable IN (N't_container_detail', N't_container_station', N't_pick_container');
+
+SELECT Section = 'C_APPLIED', ObjectSpecsRemoved = @specs, IndexRequirementsRemoved = @@ROWCOUNT, ConfigChangeSetId = @cs;
 COMMIT;
 
 ------------------------------------------------------------------------------
