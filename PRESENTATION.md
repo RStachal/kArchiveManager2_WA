@@ -12,42 +12,46 @@ else is detail.
 
 ## Before the room fills
 
-### Reset to a clean baseline — 5 minutes, and worth it
+### Know which data you are standing on
+
+The reference instance has held **two different data sets** in its life, and the
+demo differs depending on which one is loaded. Check first:
+
+```sql
+SELECT COUNT(*) AS Orders,
+       SUM(CASE WHEN order_number LIKE N'KAMT-%' THEN 1 ELSE 0 END) AS Seeded
+FROM AAD.dbo.t_order;
+```
+
+**Real WMS data** (`Seeded = 0`) — what is loaded since **2026-09-15**. 843 orders,
+1 055 containers, 1 132 picks, 111 POs, 44 926 ADV messages, with the real
+foreign keys enforced. This is the honest demo: the audience sees their own kind
+of data move, and the FK-completeness of the ORDER set is exercised for real. Do
+**not** run `40_perf_seed.sql` on top of it — that would mix synthetic keys into a
+real schema. There is no reset; the archive simply fills as you run.
+
+Measured on this data, 2026-09-16, one RUN of the ORDER set: **1 977 rows
+archived, 1 977 deleted, divergence 0**; 334 orders in 7 batches; 0 orphans, 0
+gate violations; 509 orders left, every one of them not yet eligible.
+
+**Seeded test data** (`Seeded > 0`) — what `40_perf_seed.sql` produces, and what
+the throughput numbers below were measured on. If you want that instead:
 
 ```
 sql/99_cleanup_test.sql     edit :setvar CleanTestData "1", run it
 sql/40_perf_seed.sql        run it
 ```
 
-That order matters. `40` reuses the same key space every time (`KAMT-OF*`,
-`KAMPO-B*`, `KAMTB*`), so seeding onto a non-empty archive leaves the archive
-holding two generations of the same keys. Nothing breaks, but the dashboard counts
-stop meaning anything and `33_verify_bulk.sql` starts reporting violations that are
-not real.
+in that order — `40` reuses the same key space every time (`KAMT-OF*`, `KAMPO-B*`,
+`KAMTB*`), so seeding onto a non-empty archive leaves two generations of the same
+keys in it. Reset gives the archive an empty start, and the seed holds back
+**55 000 rows deliberately** — an order not shipped, a pick not `SHIPPED`, a PO
+still open — which is how you prove the tool is selective rather than merely fast.
 
-Reset also gives you the better demo: **the archive starts empty**, so the audience
-watches it fill from zero instead of watching a number that was already large get
-larger.
+Either way, the safety story is the same. On real data it is simply true rather
+than demonstrated.
 
-State after the reset, as measured:
-
-| | source | archive |
-|---|---:|---:|
-| `t_order` | 25 000 | 0 |
-| `t_pick_detail` | 75 000 | 0 |
-| `t_pick_container` | 25 000 | 0 |
-| `t_pick_task_uom` | 75 000 | 0 |
-| `t_tran_log` | 75 000 | 0 |
-| `t_work_q` | 75 001 | 0 |
-| `t_po_master` | 25 001 | 0 |
-| `ADV.t_log_message` | 90 000 | 0 |
-
-220 000 eligible documents, and **55 000 rows deliberately held back** — an order
-that is not shipped, a pick that is not `SHIPPED`, a PO still open, a transaction
-inside the retention window. Those are the point of the whole demo: they are how
-you prove the tool is selective rather than merely fast.
-
-### Check these four things
+### Check these five things
 
 ```sql
 -- 1. configuration is valid
@@ -58,6 +62,14 @@ SELECT Status, COUNT(*) FROM arch.WorkBatch GROUP BY Status;   -- no Running, no
 
 -- 3. the jobs are owned by the runner, not a sysadmin (else PREP fails 51001)
 SELECT name, SUSER_SNAME(owner_sid) FROM msdb.dbo.sysjobs WHERE name LIKE 'kArchiveManager%';
+
+-- 3b. the console can still reach every source database. A RESTORE of a WMS
+--     database takes its user with it and NOTHING warns you - readiness stays
+--     green and one dashboard panel returns 503. Costs two seconds to check.
+EXECUTE AS LOGIN = N'IIS APPPOOL\kAM Admin Console';
+SELECT name, HAS_DBACCESS(name) FROM sys.databases
+WHERE name IN ('AAD','ADV','kArchiveManagerAdmin','kArchiveManagerBackups');
+REVERT;                                        -- any 0 -> re-run 051
 
 -- 4. the console answers
 --    http://localhost:8089  -> readiness databaseOk true, processCount 6
@@ -201,7 +213,7 @@ WHERE t.name IN ('t_pick_detail','t_pick_task_uom','t_allocation')
 GROUP BY t.name;
 ```
 
-Measured on this instance, one minute, one set (`AAD_PICKDETAIL_ARCH`):
+**On the seeded data**, one minute, one set (`AAD_PICKDETAIL_ARCH`):
 
 | table | deleted from source in 60 s |
 |---|---:|
@@ -212,10 +224,26 @@ Measured on this instance, one minute, one set (`AAD_PICKDETAIL_ARCH`):
 
 Every one of those rows was written to `kArchiveManagerBackups` first, so the real
 work rate is roughly **950 000 row operations per minute** on a single-socket
-evaluation VM.
+evaluation VM. Across that full test, all six sets: **2 986 057 rows archived,
+2 986 057 rows deleted, divergence 0.**
 
-Across the full test, all six sets: **2 986 057 rows archived, 2 986 057 rows
-deleted, divergence 0.**
+**On the real WMS data** the volumes are far smaller, so do not promise a rate
+from this run — promise the *shape*. One RUN on 2026-09-16 moved 68 122 rows
+across all six sets in under four minutes, divergence 0:
+
+| set | archived = deleted |
+|---|---:|
+| `ADV_LOGMSG_ARCH` | 53 377 |
+| `AAD_TRANLOG_ARCH` | 12 085 |
+| `AAD_WORKQ_ARCH` | 3 012 |
+| `AAD_ORDER_ARCH` | 1 977 |
+| `AAD_PO_ARCH` | 503 |
+| `AAD_PICKDETAIL_ARCH` | 168 |
+
+The ORDER figure is the one to talk through: 334 orders in 7 batches, each batch
+taking its `t_order_detail`, `t_pack`, `t_container_master` and `t_order_status`
+rows with it and deleting the order header **last**. 509 orders stayed, every one
+of them not yet eligible.
 
 ### 5. Stop it — and know what Stop means
 
@@ -265,22 +293,28 @@ This is the part that matters, and it is the part most demos skip.
 sql/33_verify_bulk.sql
 ```
 
-Results on the settled state after the full run:
+Results on the settled state:
 
-* **Section C — 12 gate checks, every one 0.** No row in the archive violates the
-  gate it was supposed to satisfy. Spot-check live if someone is sceptical:
-  after the pick set completed, `AAD.t_pick_detail` held exactly **one** row, and it
-  was the one row whose status was not `SHIPPED`.
-* **Section D — 9 orphan checks, every one 0.** No archived child lost its parent,
+* **Section C — every gate check 0.** No row in the archive violates the gate it
+  was supposed to satisfy. Spot-check live if someone is sceptical: on the seeded
+  data, after the pick set completed `AAD.t_pick_detail` held exactly **one** row,
+  and it was the one row whose status was not `SHIPPED`.
+* **Section D — every orphan check 0.** No archived child lost its parent,
   including `t_rcpt_ship_po`, the junction that links receipts and shipments to POs
   and the one place where archiving a PO could have stranded a live shipment.
-* **Section E — archived 1 455 253, deleted 1 455 253, divergence 0.**
+* **Section E — archived = deleted, divergence 0.** 1 455 253 on the seeded run;
+  68 122 on the real-data run.
+* **Section F — deferred exposure, and it is not zero.** 563 containers,
+  674 `t_container_detail` and 397 `t_container_station` rows sit in the source
+  belonging to orders that are already archived. Say so plainly if it comes up:
+  the container family needs its own set and has not got one yet. Nothing is lost
+  and nothing is inconsistent — the containers simply have not been archived.
 
-**Run this only when nothing is in flight.** With a batch mid-flight, section C's two
+**Run this only when nothing is in flight.** With a batch mid-flight, section C's
 child checks legitimately report violations, because ANCHOR archives children before
 their header — that is the normal intermediate state, not a fault. Observed during
-this test: 15 012, then 11 097, then **0**, as the batches completed. The script now
-prints that warning above section C.
+an interrupted run: 15 012, then 11 097, then **0**, as the batches completed. The
+script now prints that warning above section C.
 
 ### 7. The console
 
@@ -322,6 +356,16 @@ keys, the run is marked FAILED rather than assumed complete, and the next run
 resumes it — under the cutoff it was originally prepared with, so the selection
 cannot drift underneath you.
 
+**"Why are the containers still there?"** Asked by anyone who watches the counts.
+`t_pick_container` is not in the ORDER set, on purpose. It has no foreign key to
+`t_order`, so orders archive cleanly without it — but three tables have foreign
+keys *into it*, and two of those carry no `order_number`, so an order-keyed set
+cannot reach them. They need a set anchored on the container itself. That is
+scoped, not forgotten: the exposure is counted every run by `33_verify_bulk.sql`
+section F, and the two open decisions are written down in `README.md` under *The
+container family*. The honest version is "we found it, we measured it, and we did
+not guess at the retention rule for it."
+
 **"Can we get the data back?"** `arch.usp_RestoreFromArchive`, and there is a
 console preview for it. It writes into a production source table, so the grant is
 withheld by default and a DBA has to make that call deliberately.
@@ -337,5 +381,8 @@ withheld by default and a DBA has to make that call deliberately.
 | A run sits at `RUNNING` forever | worker killed mid-batch | `usp_RecoverStaleRuns @StaleAfterMinutes = 0` |
 | Dashboard shows many failed batches | dry-run previews close as `Failed` | read `arch.WorkBatch.Notes` |
 | Verification reports gate violations | a batch is still in flight | let it finish, then re-run |
-| Nothing is eligible | the reset was not run, or everything is already archived | `99` then `40` |
+| Nothing is eligible | the reset was not run, or everything is already archived | `99` then `40` (seeded data only) |
 | Console shows `databaseOk: false` | app-pool login not in all five roles | `ADMIN-CONSOLE.md`, correction 4 |
+| One dashboard panel 503, everything else 200 | a source DB was restored; the console's user went with it (`Msg 916`) | re-run `051`; `ADMIN-CONSOLE.md`, *Two traps* |
+| RUN fails: *Unsafe SQL in ... JoinToAnchorPredicateSql* | someone added an ObjectSpec by direct INSERT, past the API gate | `sql/57_order_set_container_family.sql` in plan mode shows which predicate |
+| RUN fails on a foreign key | the anchor's set is missing an FK child | the FK-completeness query in `DEPLOYMENT.md` Phase 3 |

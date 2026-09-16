@@ -215,13 +215,14 @@ FROM (
               AND (closed_date IS NULL
                    OR CAST(CAST(closed_date AS datetime2) AT TIME ZONE @Tz AT TIME ZONE N'UTC' AS datetime2(0)) >= @Cut))
     UNION ALL
-    -- The two children added by 26 must never appear for a document that was
-    -- itself held back: a container whose order is still in the source, or a
-    -- task_uom row whose pick is still in the source, means over-matching.
-    SELECT 'AAD_ORDER_ARCH', 'container only for an archived order',
-           (SELECT COUNT_BIG(*) FROM [$(ArchiveDb)].[$(WmsDb)].t_pick_container c
-            WHERE c.container_id LIKE N'KAMTC-B%'
-              AND EXISTS (SELECT 1 FROM [$(WmsDb)].dbo.t_order o
+    -- The children added by 26 must never appear for a document that was itself
+    -- held back: a row whose order/pick is still in the source means over-matching.
+    -- t_pick_container is NOT checked here any more - it left the ORDER set on
+    -- 2026-09-16 (57: FK children it cannot express, no FK to t_order). Its
+    -- exposure is MEASURED in section F instead.
+    SELECT 'AAD_ORDER_ARCH', 'container_master only for an archived order',
+           (SELECT COUNT_BIG(*) FROM [$(ArchiveDb)].[$(WmsDb)].t_container_master c
+            WHERE EXISTS (SELECT 1 FROM [$(WmsDb)].dbo.t_order o
                           WHERE o.order_number = c.order_number AND o.wh_id = c.wh_id))
     UNION ALL
     SELECT 'AAD_PICKDETAIL_ARCH', 'task_uom only for an archived pick',
@@ -273,11 +274,6 @@ FROM (
             WHERE d.order_number LIKE N''KAMT-OF%''
               AND NOT EXISTS (SELECT 1 FROM ' + QUOTENAME(N'$(WmsDb)') + N'.dbo.t_order o WHERE o.order_number = d.order_number AND o.wh_id = d.wh_id))
     UNION ALL
-    SELECT ''t_pick_container -> t_order'',
-           (SELECT COUNT_BIG(*) FROM ' + QUOTENAME(N'$(WmsDb)') + N'.dbo.t_pick_container c
-            WHERE c.container_id LIKE N''KAMTC-B%''
-              AND NOT EXISTS (SELECT 1 FROM ' + QUOTENAME(N'$(WmsDb)') + N'.dbo.t_order o WHERE o.order_number = c.order_number AND o.wh_id = c.wh_id))
-    UNION ALL
     SELECT ''t_po_detail -> t_po_master'',
            (SELECT COUNT_BIG(*) FROM ' + QUOTENAME(N'$(WmsDb)') + N'.dbo.t_po_detail d
             WHERE d.po_number LIKE N''KAMPO-B%''
@@ -327,6 +323,38 @@ IF NOT EXISTS (SELECT 1 FROM arch.v_OperationalHealth WHERE Severity <> N'OK')
 GO
 
 PRINT '';
+/* ===========================================================================
+   F) DEFERRED EXPOSURE - measured, not gated
+   ===========================================================================
+   t_pick_container left the ORDER set on 2026-09-16 (57). It has no FK to
+   t_order, so orders archive cleanly without it, but its three FK children
+   (t_container_detail, t_container_station, t_container_master) cannot all be
+   expressed in an order-keyed set. Until the container family gets a set of its
+   own, containers of archived orders stay in the source. This is the count.
+   It is NOT a failure; it is the size of the open design decision.
+   =========================================================================== */
+PRINT '';
+PRINT '=== F) Deferred exposure: containers still in the source whose order is archived ===';
+GO
+SELECT Section = 'F_DEFERRED', What = 'containers of archived orders (source)',
+       Cnt = (SELECT COUNT_BIG(*) FROM [$(WmsDb)].dbo.t_pick_container pc
+              WHERE EXISTS (SELECT 1 FROM [$(ArchiveDb)].[$(WmsDb)].t_order o
+                            WHERE o.order_number = pc.order_number AND o.wh_id = pc.wh_id))
+UNION ALL
+SELECT 'F_DEFERRED', 'container_detail rows under them',
+       (SELECT COUNT_BIG(*) FROM [$(WmsDb)].dbo.t_container_detail d
+        JOIN [$(WmsDb)].dbo.t_pick_container pc ON pc.wh_id = d.wh_id AND pc.container_id = d.container_id
+        WHERE EXISTS (SELECT 1 FROM [$(ArchiveDb)].[$(WmsDb)].t_order o
+                      WHERE o.order_number = pc.order_number AND o.wh_id = pc.wh_id))
+UNION ALL
+SELECT 'F_DEFERRED', 'container_station rows under them',
+       (SELECT COUNT_BIG(*) FROM [$(WmsDb)].dbo.t_container_station s
+        JOIN [$(WmsDb)].dbo.t_pick_container pc ON pc.wh_id = s.wh_id AND pc.container_id = s.container_id
+        WHERE EXISTS (SELECT 1 FROM [$(ArchiveDb)].[$(WmsDb)].t_order o
+                      WHERE o.order_number = pc.order_number AND o.wh_id = pc.wh_id));
+PRINT 'A non-zero count here is expected and is not a defect. See 57 and 26 section 1.';
+GO
+
 PRINT '33_verify_bulk: done. Read section C first - it is the "only the';
 PRINT 'configured rows" test, and every count in it must be 0 - but only once';
 PRINT 'the run has finished. See the note printed above section C.';

@@ -98,14 +98,24 @@ in `25_seed_document_sets.sql`, and repeated in `26` and `27`.
 |---|---|---|---|---|
 | 10 | `AAD_PICKDETAIL_ARCH` | ANCHOR | `t_pick_detail` | `t_allocation`, `t_pick_task_uom` |
 | 20 | `AAD_TRANLOG_ARCH` | ANCHOR | `t_tran_log` | `t_tran_log_reason`, `t_tran_log_sn` |
-| 30 | `AAD_ORDER_ARCH` | ANCHOR | `t_order` | `t_order_detail_comment` → `t_order_comment` → `t_order_detail` → `t_pack` → `t_pick_container` |
+| 30 | `AAD_ORDER_ARCH` | ANCHOR | `t_order` | `t_order_detail_comment` → `t_order_comment` → `t_order_detail` → `t_pack` → `t_container_master` → `t_order_status` → `t_geek_pick_order` |
 | 40 | `AAD_WORKQ_ARCH` | TIMESTAMP | `t_work_q` | `assignment`, `dependency` (both sides) |
 | 50 | `ADV_LOGMSG_ARCH` | ANCHOR | `t_log_message` | — |
 | 60 | `AAD_PO_ARCH` | ANCHOR | `t_po_master` | `t_po_detail_comment` → `t_po_comment` → `t_po_detail` → `t_rcpt_ship_po` |
 
-`t_pick_task_uom` and `t_pick_container` were added by `26` after the data-model
-analysis; `AAD_PO_ARCH` is the inbound set added by `27`. See *The inbound side*
-below for why purchase orders needed a set of their own.
+`t_pick_task_uom` was added by `26` after the data-model analysis; `AAD_PO_ARCH`
+is the inbound set added by `27`. See *The inbound side* below for why purchase
+orders needed a set of their own.
+
+**The ORDER set is FK-complete, and that took two attempts.** `sys.foreign_keys`
+lists six tables referencing `t_order`; three of them — `t_container_master`,
+`t_order_status`, `t_geek_pick_order` — were missing until 2026-09-16, and on real
+data the `t_order` delete fails on the foreign key the moment one of them holds a
+row. `26` section 1b adds them, conditionally: `t_geek_pick_order` is a Geek+
+robotics extension and will not exist on every site.
+
+`t_pick_container` is **not** in the set, for the opposite reason — see
+*The container family* below.
 
 ### Why `t_pick_detail` and `t_tran_log` are not details of the order
 
@@ -183,9 +193,57 @@ house rule. `24_seed_logmessage_anchor.sql` supersedes it.
 | `t_item_uom`, `t_pick_put_master` / `_detail`, `t_item_master` | Master and configuration data. `t_item_uom` alone is referenced by 88 modules. Note that `pick_put_id` is a pick/put **profile** — a different concept from `pick_id`. |
 | `ADV.t_log_message_action` | Name suggests a child of `t_log_message`; it is a log-*level* configuration table (`application_id`, `action_type`, `log_level_override`) with no relationship to it at all. |
 
-**`t_pick_container` was in this list and is no longer.** It was excluded as
-"reachable only via `t_allocation.allocation_id`", which was wrong: it carries
-`order_number` + `wh_id` directly and belongs to the ORDER set. `26` adds it.
+**`t_pick_container` left this list, was added to the ORDER set, and has now been
+taken out again.** Each step was right on the evidence available at the time, and
+the sequence is worth keeping because the third step is the one that matters.
+
+It was first excluded as "reachable only via `t_allocation.allocation_id`" — wrong;
+it carries `order_number` + `wh_id` directly. `26` therefore added it to the ORDER
+set at `DeleteOrder` 45, and the throughput tests passed. They passed because the
+seeded containers had no children. See *The container family*.
+
+---
+
+## The container family, and why it is deferred rather than configured
+
+`t_pick_container` has three tables carrying an enforced, trusted foreign key
+**into** it on `(wh_id, container_id)`:
+
+| child | FK since | rows on the reference data |
+|---|---|---:|
+| `t_container_detail` | 2024-02 | 1 443 |
+| `t_container_station` | 2024-01 | 711 |
+| `t_container_master` | 2024-01 | 1 010 |
+
+Delete a container while any of them still references it and the delete fails.
+`t_container_master` is fine — it carries `order_number`, so it joins to the ORDER
+set plainly and is configured there at `DeleteOrder` 43. The other two **do not
+have `order_number`**. Their only path to the order runs through
+`t_pick_container`, and the runtime builds
+
+```sql
+DELETE t FROM <table> t INNER JOIN #Keys k ON <JoinToAnchorPredicateSql>
+```
+
+with only `t` and `k` in scope. Expressing the hop needs a subquery, and
+`arch.usp_AssertSafeSqlExpression` refuses subqueries — `THROW 50400`.
+
+So the container family needs a **set of its own**, anchored on `t_pick_container`
+with keys `(container_id, wh_id)`, where every child join is a plain equality. Two
+decisions belong to the data-model owner before that set is written:
+
+1. **The gate.** Container status is not a proxy for order completion here: 575 of
+   1 039 `ACTIVE` containers sit on orders that are already `SHIPPED`. A cutoff on
+   `actual_ship_date` is the honest option, not a status test.
+2. **`t_container_master` has two parents** — foreign keys to both `t_order` and
+   `t_pick_container` — so it must be deletable by either set. Configuring one
+   table in two sets is allowed (`t_work_q_dependency` already is); whichever set
+   runs first takes the rows and the other finds nothing.
+
+Until then containers of archived orders stay in the source. That exposure is
+**measured, not hidden**: `33_verify_bulk.sql` section F counts it every run. On
+the reference data after the first real-data run: 563 containers, 674
+`t_container_detail` rows, 397 `t_container_station` rows.
 
 ---
 
@@ -257,13 +315,17 @@ The `t_po_detail_comment` count is the delete-order proof: it cascades from
 the cascade would destroy rows that were never archived and archived would fall
 below deleted.
 
-### Test result for the two added children
+### Test result for the added children
 
-`t_pick_container` 1 archived = 1 deleted; `t_pick_task_uom` 1 archived = 1 deleted;
-divergence 0. The container on a **held** order survived, and so did the container
-with `order_number` NULL — that one can never match the predicate and is left in
-place by design. It is the accepted limitation of that object: the table is not
-fully drained by this set, but nothing unattributable is ever deleted.
+`t_pick_task_uom` 1 archived = 1 deleted, divergence 0.
+
+`t_pick_container` also passed this test — 1 archived = 1 deleted, the container on
+a **held** order survived, and the one with `order_number` NULL was left in place.
+**That result was correct and still misleading**, which is the lesson worth
+keeping: the test rows had no `t_container_detail` or `t_container_station`
+children, so the foreign key that makes the delete impossible on real data was
+never exercised. A child table proved safe against data that lacked the very rows
+that break it. The table is no longer in the set — see *The container family*.
 
 ---
 
@@ -427,9 +489,9 @@ yes/no answer with no interpretation. All twelve came back 0 —
 - no `t_tran_log` row inside the window;
 - no work queue outside `(C,P)`, and none inside the window;
 - no PO outside status `C`, and none with a NULL or too-recent `closed_date`;
-- no `t_pick_container` whose order is still in the source, and no
-  `t_pick_task_uom` whose pick is still in the source — the two children added by
-  `26` do not over-match;
+- no `t_container_master` whose order is still in the source, and no
+  `t_pick_task_uom` whose pick is still in the source — the added children do not
+  over-match;
 - and **no archive table at all for `t_rcpt_ship`**, which is in no set.
 
 `ORDER` and `PO` each needed exactly two runs, as predicted from
@@ -496,12 +558,17 @@ than one minute of throughput.
 | `AAD_ORDER_ARCH` | `t_order_detail` | 13 300 | 233 |
 | | `t_order` | 6 650 | 117 |
 | | `t_order_comment` | 6 650 | 117 |
-| | `t_pick_container` | 6 650 | 117 |
+| | `t_pick_container` † | 6 650 | 117 |
 | | `t_order_detail_comment` | 3 330 | 58 |
 | | `t_pack` | 2 | — |
 
 `Divergence` (archived − deleted) was **0** on every table, `COVERAGE` reported all
 six sets measured, and `PURGE_INTERFERENCE` was empty so the ADV figure is clean.
+
+† `t_pick_container` was in the ORDER set when this was measured and is not any
+more (*The container family*). The row is left as recorded rather than deleted —
+the measurement happened. Its rate is also the reason the removal costs nothing
+in throughput terms: at 117 rows/s it was never the constraint.
 
 ### Earlier runs, for the variance
 
@@ -617,17 +684,18 @@ Size the first production run from a measurement, not from this README.
 | `12_verify.sql` | no | Baseline reconciliation for the order/work-queue pair |
 | `13_restore.sql` | opt-in | Restore from archive |
 | `19_add_logmessage_key.sql` | — | **DO NOT USE** — breaks the house rule; see `24` |
-| `26_add_pick_order_children.sql` | **yes** (config) | Adds `t_pick_container` to the ORDER set and `t_pick_task_uom` to the PICKDETAIL set. Also records why the other 51 candidates were rejected |
+| `26_add_pick_order_children.sql` | **yes** (config) | Adds `t_pick_task_uom` to the PICKDETAIL set, and the three missing FK children of `t_order` (`t_container_master`, `t_order_status`, `t_geek_pick_order` — the last skipped where the site has no Geek+ extension). Records why the other 51 candidates were rejected, and why `t_pick_container` is **not** added |
 | `27_seed_po_set.sql` | **yes** (config) | Sixth set: purchase orders (`AAD_PO_ARCH`). Section D measures the shipment-link exposure that cannot be gated in configuration |
 | `31_test_data_po.sql` | **yes** (test rows) | Six purchase orders: three archived, three held for three different reasons, plus the open-shipment case |
 | `32_test_data_children.sql` | **yes** (test rows) | Self-contained cases for the two added children, including a container with `order_number` NULL that must survive |
-| `33_verify_bulk.sql` | no | The volume test's verdict: reconciliation, completeness, **12 gate checks against the archive**, 9 orphan checks, divergence and health. Section C is the "only the configured rows" test |
+| `33_verify_bulk.sql` | no | The volume test's verdict: reconciliation, completeness, **12 gate checks against the archive**, 8 orphan checks, divergence and health, plus section F measuring the deferred container exposure. Section C is the "only the configured rows" test — read the timing caveat printed above it |
 | `50_reporting.sql` | no | Verifies the 2.0 reporting layer is deployed, **executes all 19 reporting procedures** against the live configuration, prints per-set and per-table movement plus go-live readiness, and documents three output artefacts that look like defects and are not |
 | `40_perf_seed.sql` | **yes** (test rows) | Bulk seed for throughput measurement: ~2.6 M eligible rows across all 14 tables, sized so a 60-second run cannot drain it. Invalidates stale candidate batches, keeps ADV under the vendor size cap |
 | `41_perf_test.sql` | **DELETES** | One-minute run per set through the impersonated runner; per-table and per-set rates, prepare/process split, validity, coverage and vendor-purge interference checks. Lifts and restores the batching caps |
 | `42_perf_restore.sql` | **yes** (restore) | Undoes all three things `40`/`41` change outside their test data: the batching caps and the vendor job (from `perf.TestBaseline`) and the generated `PERF_*` profiles. `-Stage perf` runs it in a `finally`, so it fires even when the measurement dies mid-way. Idempotent — safe on an instance where the perf scripts never ran |
 | `55_fix_prep_job_owner.sql` | opt-in | Re-owns `PREP CONFIGURED` to the runner login. Without it the PREP job **fails every time it is started** — it carries the runner privilege gate but `054` re-owns only `RUN CONFIGURED`, so the gate evaluates a sysadmin and refuses. Evaluates the gate as the runner first. Use on an **existing** instance |
 | `56_agent_jobs.sql` | opt-in | All **five** Agent jobs in one script — PREP, RUN, RECOVER STALE RUNS and the two archive backups — with the ownership, schedules and step text this deployment was tested with, and both runner jobs owned correctly from the outset. Use when **building** an instance; it replaces the job-creating parts of `028`/`036`/`048`/`054` rather than supplementing them |
+| `57_order_set_container_family.sql` | opt-in | Removes `t_pick_container` and the two container children from the ORDER set on an instance where an earlier revision of `26` added them, or where someone added them by hand. Prints the runtime safety gate's verdict on **every** join predicate in the set first, then proves FK-completeness against `sys.foreign_keys`. Writes a `ConfigChangeSet` record, because the product has no delete API for `ObjectSpec` |
 | `99_cleanup_test.sql` | opt-in | Removes test rows / run history / profiles / config (four switches). Always restores the performance-test baseline. Covers all 21 configured tables — the PO family and the two children added by `26`/`27` were missing until 2026-09-14 |
 
 ---

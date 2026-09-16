@@ -1,12 +1,19 @@
 -- ============================================================================
 -- 26 - TWO CHILD TABLES THE DATA-MODEL ANALYSIS FOUND MISSING
 -- ============================================================================
--- Adds two ObjectSpec rows to sets that already exist and are already tested.
+-- Adds ObjectSpec rows to sets that already exist and are already tested.
 -- No new process, no new key, no change to any cutoff or gate - so the existing
 -- test evidence for those sets stays valid and only the new tables need proving.
 --
---   t_pick_container  -> AAD_ORDER_ARCH       joined on (order_number, wh_id)
+--   t_pick_container  -> AAD_ORDER_ARCH       NO LONGER ADDED - see section 1.
+--                                             It has FK children the set cannot
+--                                             express, and no FK to t_order.
 --   t_pick_task_uom   -> AAD_PICKDETAIL_ARCH  joined on (pick_id)
+--
+-- Revised 2026-09-16. Earlier revisions added t_pick_container at DeleteOrder
+-- 45; on real data the delete fails on the FK from t_container_detail /
+-- t_container_station. 57_order_set_container_family.sql removes it from an
+-- instance where this script already ran.
 --
 -- WHY THESE TWO, AND NOT THE OTHER FIFTY-ONE CANDIDATES
 --
@@ -116,48 +123,130 @@ GO
    safe direction - we never delete a row we cannot attribute - but it does mean
    the table is not fully drained by this set. Rows in that state need a separate
    answer if they turn out to be common on a live instance.
+
+   WHAT THE ANALYSIS ABOVE MISSED - AND WHY THIS SECTION NO LONGER ADDS THE TABLE
+   (2026-09-16)
+
+   Everything above about the WMS *procedures* is true and was verified. What it
+   did not look at is sys.foreign_keys. Three tables carry an enforced, trusted
+   foreign key INTO t_pick_container on (wh_id, container_id):
+
+       t_container_detail    FK since 2024-02, 1 443 rows on the reference data
+       t_container_station   FK since 2024-01,   711 rows
+       t_container_master    FK since 2024-01, 1 010 rows
+
+   Deleting a container while any of them still references it fails on the FK.
+   The throughput tests never hit this because the seeded containers (KAMTC-B%)
+   had no children; the first run on real data did, and 506 containers of
+   archive-eligible orders had such children.
+
+   t_container_master has order_number and joins to the ORDER set plainly - it is
+   added by 57 and belongs at DeleteOrder 43. The other two DO NOT have
+   order_number; their only path to the order is through t_pick_container, and
+   the runtime builds  DELETE t ... INNER JOIN #Keys k ON <predicate>  with only
+   t and k in scope. The hop cannot be written without a subquery, and
+   arch.usp_AssertSafeSqlExpression refuses subqueries (50400). Someone tried
+   exactly that on 2026-09-15, by direct INSERT past the API gate, and the RUN
+   job failed on its first ORDER batch.
+
+   So t_pick_container cannot be deleted by this set on real data, and - checked
+   the same way - it does NOT need to be: sys.foreign_keys lists six tables
+   referencing t_order, and t_pick_container is not one of them. The ORDER set
+   deletes orders cleanly without it.
+
+   The container family therefore stays in the source, deliberately, until it
+   gets a set of its own anchored on t_pick_container with keys
+   (container_id, wh_id). Two decisions for the data-model owner before that set
+   is written: the gate (container status is NOT a proxy for order completion -
+   575 of 1 039 ACTIVE containers sit on SHIPPED orders; actual_ship_date is the
+   honest cutoff) and the double ownership of t_container_master, which has FKs
+   to both t_order and t_pick_container.
+
+   On an instance where an earlier revision of this script already added
+   t_pick_container, run 57_order_set_container_family.sql to take it out.
    =========================================================================== */
-DECLARE @PcOrder sysname       = N'AAD_ORDER_ARCH';
-DECLARE @By      nvarchar(256) = N'kam-deploy';
-DECLARE @RsnPc   nvarchar(1000) = N'Per-order carton and manifest detail. Found by the data-model analysis: no WMS process removes it after shipping, so it accumulates for the life of the database.';
-DECLARE @CsId    bigint = NULL;
-DECLARE @OsId    int    = NULL;
+PRINT 't_pick_container: NOT added to AAD_ORDER_ARCH - see the note above (FK children the set cannot express; no FK to t_order, so not needed).';
+GO
 
-EXEC arch.usp_Api_SaveObjectSpec
-    @ObjectSpecId             = @OsId OUTPUT,
-    @ProcessCode              = @PcOrder,
-    @RequestedBy              = @By,
-    @ChangeReason             = @RsnPc,
-    @SourceSchema             = N'dbo',
-    @SourceTable              = N't_pick_container',
-    @DeleteOrder              = 45,
-    @DeleteMode               = 1,
-    @TimestampExpr            = NULL,   -- rides the anchor's cutoff
-    @JoinToAnchorPredicateSql = N't.order_number = k.Key1 AND t.wh_id = k.Key2',
-    @AdditionalWhereSql       = NULL,
-    @ArchiveSchema            = N'{SourceDb}',
-    @ArchiveTable             = NULL,
-    @RequireArchiveForDelete  = 1,
-    @NaturalKeyLabel          = N'ORDER_NUMBER',
-    @ConfigChangeSetId        = @CsId OUTPUT;
+/* ===========================================================================
+   1b) THE FK CHILDREN OF t_order THAT THE ORIGINAL ORDER SET DID NOT HAVE
+   ===========================================================================
+   sys.foreign_keys lists six tables referencing t_order. Three of them were not
+   in the set: t_container_master, t_order_status, t_geek_pick_order. On real
+   data the t_order delete fails on the FK the moment one of them holds a row for
+   an archived order - and on the reference data they hold 1 010 / 751 / 0.
 
--- i_pick_container_ordnum is (order_number, wh_id) - exactly the join columns, in
--- that order - so this one is genuinely satisfied, unlike t_pack whose
--- requirement is on record as MISSING.
-SET @OsId = NULL;
-DECLARE @IrId int = NULL;
-EXEC arch.usp_Api_SaveIndexRequirement
-    @IndexRequirementId = @IrId OUTPUT,
-    @ProcessCode        = @PcOrder,
-    @RequestedBy        = @By,
-    @ChangeReason       = @RsnPc,
-    @RequirementType    = N'JOIN',
-    @SourceSchema       = N'dbo',
-    @SourceTable        = N't_pick_container',
-    @KeyColumnsCsv      = N'order_number,wh_id',
-    @IsMandatory        = 0,
-    @Notes              = N'Satisfied by the existing i_pick_container_ordnum (order_number, wh_id) - the join seeks. No index is needed from the schema owner.',
-    @ConfigChangeSetId  = @CsId OUTPUT;
+   These three appeared on the reference instance on 2026-09-15 by direct INSERT,
+   with no audit record. This section adds them the proper way, through the API
+   (which also runs the safety gate on the join), so a fresh deployment is
+   FK-complete without anyone having to remember.
+
+   Conditional on the table existing in the WMS schema: t_geek_pick_order in
+   particular is a site extension (Geek+ robots) and will not be everywhere. A
+   missing table is reported and skipped, not treated as an error. Idempotent:
+   a table already configured for the set is left alone.
+
+   DeleteOrder: 43 t_container_master (before t_pick_container's old slot 45, in
+   case an old revision left it there), 47 t_order_status, 48 t_geek_pick_order,
+   all before the anchor t_order at 50.
+   =========================================================================== */
+DECLARE @PcOrder2 sysname       = N'AAD_ORDER_ARCH';
+DECLARE @By2      nvarchar(256) = N'kam-deploy';
+DECLARE @Rsn2     nvarchar(1000) = N'FK child of t_order (sys.foreign_keys). Without it the t_order delete fails on real data. Added 2026-09-16 after the first real-data run exposed the gap.';
+DECLARE @Cs2      bigint = NULL;
+DECLARE @Os2      int;
+DECLARE @tbl      sysname, @ord int;
+
+DECLARE @fkKids TABLE (SourceTable sysname, DeleteOrder int);
+INSERT @fkKids VALUES (N't_container_master', 43), (N't_order_status', 47), (N't_geek_pick_order', 48);
+
+DECLARE cKids CURSOR LOCAL FAST_FORWARD FOR SELECT SourceTable, DeleteOrder FROM @fkKids ORDER BY DeleteOrder;
+OPEN cKids; FETCH NEXT FROM cKids INTO @tbl, @ord;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    IF OBJECT_ID(QUOTENAME(N'$(WmsDb)') + N'.dbo.' + QUOTENAME(@tbl), N'U') IS NULL
+        PRINT '  ' + @tbl + ': not present in $(WmsDb) - skipped (site extension not installed here).';
+    ELSE IF EXISTS (SELECT 1 FROM arch.ObjectSpec o JOIN arch.Process p ON p.ProcessId = o.ProcessId
+                    WHERE p.ProcessCode = @PcOrder2 AND o.SourceTable = @tbl)
+        PRINT '  ' + @tbl + ': already configured for ' + @PcOrder2 + ' - left alone.';
+    ELSE
+    BEGIN
+        SET @Os2 = NULL;
+        EXEC arch.usp_Api_SaveObjectSpec
+            @ObjectSpecId             = @Os2 OUTPUT,
+            @ProcessCode              = @PcOrder2,
+            @RequestedBy              = @By2,
+            @ChangeReason             = @Rsn2,
+            @SourceSchema             = N'dbo',
+            @SourceTable              = @tbl,
+            @DeleteOrder              = @ord,
+            @DeleteMode               = 1,
+            @TimestampExpr            = NULL,
+            @JoinToAnchorPredicateSql = N't.order_number = k.Key1 AND t.wh_id = k.Key2',
+            @AdditionalWhereSql       = NULL,
+            @ArchiveSchema            = N'{SourceDb}',
+            @ArchiveTable             = NULL,
+            @RequireArchiveForDelete  = 1,
+            @NaturalKeyLabel          = N'ORDER_NUMBER',
+            @ConfigChangeSetId        = @Cs2 OUTPUT;
+        PRINT '  ' + @tbl + ': added at DeleteOrder ' + CONVERT(varchar(4), @ord) + ' (ObjectSpecId ' + CONVERT(varchar(10), @Os2) + ').';
+    END;
+    FETCH NEXT FROM cKids INTO @tbl, @ord;
+END;
+CLOSE cKids; DEALLOCATE cKids;
+
+-- Prove FK-completeness the same way 57 does: every table with an FK into
+-- t_order must now be in the set. A MISSING here is a run-time FK failure later.
+SELECT Section = 'FK_COMPLETE_ORDER',
+       FkChild = OBJECT_NAME(fk.parent_object_id, DB_ID(N'$(WmsDb)')),
+       InSet = CASE WHEN EXISTS (SELECT 1 FROM arch.ObjectSpec o JOIN arch.Process p ON p.ProcessId = o.ProcessId
+                                  WHERE p.ProcessCode = @PcOrder2
+                                    AND o.SourceTable = OBJECT_NAME(fk.parent_object_id, DB_ID(N'$(WmsDb)')))
+                    THEN 'yes' ELSE '*** MISSING ***' END
+FROM [$(WmsDb)].sys.foreign_keys fk
+WHERE fk.referenced_object_id = OBJECT_ID(N'$(WmsDb).dbo.t_order')
+GROUP BY OBJECT_NAME(fk.parent_object_id, DB_ID(N'$(WmsDb)'))
+ORDER BY 2;
 GO
 
 /* ===========================================================================
@@ -181,6 +270,10 @@ DECLARE @RsnPu  nvarchar(1000) = N'Per-pick cartonisation detail. Found by the d
 DECLARE @CsId2  bigint = NULL;
 DECLARE @OsId2  int    = NULL;
 
+IF EXISTS (SELECT 1 FROM arch.ObjectSpec o JOIN arch.Process p ON p.ProcessId = o.ProcessId
+           WHERE p.ProcessCode = @PcPick AND o.SourceTable = N't_pick_task_uom')
+    PRINT '  t_pick_task_uom: already configured for AAD_PICKDETAIL_ARCH - left alone.';
+ELSE
 EXEC arch.usp_Api_SaveObjectSpec
     @ObjectSpecId             = @OsId2 OUTPUT,
     @ProcessCode              = @PcPick,

@@ -79,7 +79,7 @@ answer read-only:
 SELECT t.name, SUM(p.rows) AS Rows_
 FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
 WHERE t.name IN ('t_tran_log','t_pick_detail','t_work_q','t_order','t_order_detail',
-                 't_po_master','t_po_detail','t_pick_container','t_pick_task_uom')
+                 't_po_master','t_po_detail','t_pick_task_uom','t_container_master')
 GROUP BY t.name ORDER BY Rows_ DESC;
 ```
 
@@ -154,8 +154,49 @@ EXEC arch.usp_Api_SaveRunProfile @RunProfileCode = N'JOB_DEFAULT', ...
 Leaving it alone is also defensible — a fixed per-run ceiling is easy to reason
 about. Just do not assume the window is the only limit.
 
-**STOP if `07_validate.sql` reports any blocker.** Index WARNs are expected and
-are not blockers; see Phase 4.
+### Check FK-completeness yourself — the validator does not
+
+`arch.usp_ValidateConfiguration` does **not** compare a set against
+`sys.foreign_keys`, and it does **not** run the runtime's SQL safety gate over
+`JoinToAnchorPredicateSql` — it checks only that the predicate is *present*. Both
+gaps were paid for on the reference instance: PREP passed, validation returned
+`0`, and RUN failed on its first batch.
+
+Run this per anchor table, against the customer's schema, and read every row:
+
+```sql
+-- every table with an FK into the anchor must be in the set, or the anchor
+-- delete fails the moment one of them holds a row for an archived document
+SELECT FkChild = OBJECT_NAME(fk.parent_object_id),
+       InSet   = CASE WHEN EXISTS (SELECT 1 FROM arch.ObjectSpec o
+                                   JOIN arch.Process p ON p.ProcessId = o.ProcessId
+                                   WHERE p.ProcessCode = N'<SET>'
+                                     AND o.SourceTable = OBJECT_NAME(fk.parent_object_id))
+                      THEN 'yes' ELSE '*** MISSING ***' END
+FROM <WMS>.sys.foreign_keys fk
+WHERE fk.referenced_object_id = OBJECT_ID(N'<WMS>.dbo.<anchor>')
+GROUP BY OBJECT_NAME(fk.parent_object_id);
+```
+
+A `MISSING` is one of two things, and they need opposite answers:
+
+* the child **carries the anchor key** → add it to the set with a plain
+  `t.<key> = k.Key1` join, as `26` section 1b does for the three FK children of
+  `t_order` that were missing until 2026-09-16;
+* the child **does not carry it** and is reachable only through another table →
+  it cannot go in this set at all. The runtime joins `#Keys` to one table with
+  only `t` and `k` in scope, and `arch.usp_AssertSafeSqlExpression` refuses the
+  subquery that would express the hop (`THROW 50400`). That family needs its own
+  set, anchored where the key actually lives.
+
+`26` prints an `FK_COMPLETE_ORDER` block for exactly this reason, and
+`57_order_set_container_family.sql` prints the safety-gate verdict for every
+predicate in a set. Run `57` in plan mode on any instance you did not build
+yourself.
+
+**STOP if `07_validate.sql` reports any blocker**, or if the FK check above prints
+a `MISSING` you have not decided about. Index WARNs are expected and are not
+blockers; see Phase 4.
 
 ---
 

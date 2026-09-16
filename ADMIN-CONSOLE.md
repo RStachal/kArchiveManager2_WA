@@ -233,7 +233,9 @@ edit token.
 
 ---
 
-## A trap when creating the login
+## Two traps
+
+### Creating the login
 
 `SUSER_SID(N'IIS APPPOOL\kAM Admin Console')` returns a SID **even when no SQL
 login exists** — Windows resolves the virtual account regardless. A create-login
@@ -245,6 +247,47 @@ exists", creates nothing, and leaves an orphaned database user behind. Test
 IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = @AppLogin)
     CREATE LOGIN [...] FROM WINDOWS;
 ```
+
+### Restoring a source database silently revokes the console's read access
+
+A `RESTORE DATABASE` replaces every database principal with the ones in the backup.
+The console's user in that source database is simply gone, and **nothing tells
+you** — no error at startup, no failed login, no warning in
+`/api/readiness`, which stays `databaseOk: true` because it only checks
+`kArchiveManagerAdmin`.
+
+The single symptom is one dashboard panel:
+
+```
+GET /api/dashboard/process-summary  ->  503
+{"error":"Database call failed.",
+ "detail":"Check ConnectionStrings:ArchiveManagerAdmin and verify that
+           kArchiveManagerAdmin is reachable."}
+```
+
+The detail text points at the wrong database. The log has the truth —
+`Error Number:916` — which is *the server principal is not able to access the
+database under the current security context*.
+
+Observed here on 2026-09-16: `AAD` had been restored from a customer backup the
+previous day at 14:32, bringing 27 of the customer's own orphaned SQL users with
+it and taking the console's user with it. The archive **jobs kept working**, which
+makes it harder to spot, because the runner login had been re-created afterwards
+and the console had not.
+
+Diagnose it in one query — run it as yourself, it impersonates for you:
+
+```sql
+EXECUTE AS LOGIN = N'IIS APPPOOL\kAM Admin Console';
+SELECT name, HAS_DBACCESS(name) FROM sys.databases
+WHERE name IN ('AAD','ADV','kArchiveManagerAdmin','kArchiveManagerBackups');
+REVERT;
+```
+
+A `0` anywhere is the answer. Fix by re-running
+`051_grant_console_read_source_dbs.sql` with `@DbsCsv` listing every source plus
+the archive. **Add it to the runbook of whoever restores WMS databases** — it will
+happen again, and next time it may be the week of a go-live.
 
 ---
 
