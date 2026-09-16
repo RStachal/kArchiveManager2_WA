@@ -27,12 +27,14 @@ kArchiveManagerBackups_PresentationStart.bak    1 MB
 
 Restoring all four puts you back at the start in about fifteen seconds, and it is
 the only reset that is guaranteed self-consistent — the archive matches the source
-it was emptied against. Restore `AAD` and `ADV` with `SINGLE_USER WITH ROLLBACK
-IMMEDIATE ... WITH REPLACE`, then `MULTI_USER`.
+it was emptied against.
 
-**Then re-run `053` and `051`, in that order, every single time.** A restore
-replaces every database principal: the runner and the console both lose their
-users in the restored database and nothing warns you. Check it took:
+**These four carry the runner and console database users**, because the principals
+were re-created before the backups were taken. Restoring *them* therefore does not
+need `053` and `051` afterwards. Restoring any **older** backup does — including
+`AAD_PREZENTACE_START.bak` / `ADV_PREZENTACE_START.bak`, which predate the
+principals. A restore replaces every database principal and nothing warns you, so
+when in doubt spend the two seconds:
 
 ```sql
 EXEC arch.usp_VerifyRunnerPrivileges;   -- must return 0
@@ -41,6 +43,40 @@ SELECT name, HAS_DBACCESS(name) FROM sys.databases
 WHERE name IN ('AAD','ADV','kArchiveManagerAdmin','kArchiveManagerBackups');
 REVERT;                                 -- every row must be 1
 ```
+
+### Restoring these from SSMS can leave ADV unusable — check it every time
+
+The SSMS restore wizard emits `SET SINGLE_USER WITH ROLLBACK IMMEDIATE`, the
+restore, then `SET MULTI_USER`. **That last statement races anything reconnecting
+to the database, and on this server it loses**: the Körber One Advantage Platform
+holds ten sessions against `ADV` and grabs the one free slot the instant the
+restore finishes. The database is then stuck in `SINGLE_USER` with the WMS
+application holding it, and the next job dies:
+
+```
+Step 1 VALIDATE CONFIGURATION  FAILED
+Database 'ADV' is already open and can only have one user at a time.
+[SQLSTATE 42000] (Error 924)
+```
+
+Seen on 2026-09-16: `AAD` won the race and `ADV` lost, from the same wizard, one
+minute apart. So check after every restore, and fix it by taking the single slot
+yourself before opening the door — a plain `SET MULTI_USER` deadlocks against the
+application and fails:
+
+```sql
+SELECT name, user_access_desc FROM sys.databases
+WHERE name IN ('AAD','ADV','kArchiveManagerAdmin','kArchiveManagerBackups');
+
+-- if anything says SINGLE_USER:
+SET DEADLOCK_PRIORITY HIGH;
+ALTER DATABASE [ADV] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;  -- the slot is now yours
+ALTER DATABASE [ADV] SET MULTI_USER;
+```
+
+Restoring from a script rather than the wizard avoids the wizard's
+`WITH RESTRICTED_USER` default, but not the race — the two `ALTER` statements above
+are the reliable fix either way.
 
 To rebuild that starting point from scratch instead — after a demo, or on another
 instance — use `sql/58_presentation_reset.sql`. It clears every record from
@@ -436,5 +472,6 @@ withheld by default and a DBA has to make that call deliberately.
 | Nothing is eligible | the reset was not run, or everything is already archived | `99` then `40` (seeded data only) |
 | Console shows `databaseOk: false` | app-pool login not in all five roles | `ADMIN-CONSOLE.md`, correction 4 |
 | One dashboard panel 503, everything else 200 | a source DB was restored; the console's user went with it (`Msg 916`) | re-run `051`; `ADMIN-CONSOLE.md`, *Two traps* |
+| Step 1 fails: *Database 'ADV' is already open* (`Msg 924`) | an SSMS restore left it `SINGLE_USER`; the WMS app took the one slot | `SET SINGLE_USER WITH ROLLBACK IMMEDIATE` then `SET MULTI_USER` — see *Before the room fills* |
 | RUN fails: *Unsafe SQL in ... JoinToAnchorPredicateSql* | someone added an ObjectSpec by direct INSERT, past the API gate | `sql/57_order_set_container_family.sql` in plan mode shows which predicate |
 | RUN fails on a foreign key | the anchor's set is missing an FK child | the FK-completeness query in `DEPLOYMENT.md` Phase 3 |
