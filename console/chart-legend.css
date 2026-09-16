@@ -1,0 +1,105 @@
+/* ==========================================================================
+   kArchiveManager 2.0 Admin Console - chart legend and colour tooltips
+   Append to wwwroot/assets/index-<hash>.css. CSS only; the JS bundle is not
+   touched. Delete this block to revert - nothing above it depends on it.
+
+   WHAT IT FIXES
+
+   1. The legend on "Source vs Archived by table" is already built and already
+      rendered. You have just never seen it. The bundle renders
+
+          <div class="chart-legend">
+            <span><span class="legend-dot source"></span>Source</span>
+            <span><span class="legend-dot archive"></span>Archived</span>
+          </div>
+
+      as the LAST child of .bar-chart - and .bar-chart is
+      max-height:460px; overflow-y:auto. With twenty-odd configured tables the
+      legend sits below the fold, so it is only visible to someone who scrolls
+      the chart to the very end. Pinning it to the bottom of the scroll port
+      makes it permanently visible without changing any markup.
+
+   2. "Difference by table" has no legend element at all, and its two colours
+      are the ones most likely to be misread on stage: a NEGATIVE difference is
+      drawn teal and means the archive holds more than the source, which is the
+      normal end state, not an error. Hover tooltips cover it.
+
+   THE COLOURS, read out of the bundle rather than guessed
+
+     .bar.source       #0f766e  teal    rows still in the source database
+     .bar.archive      #d97706  amber   rows present in the archive
+     .delta.negative   #0f766e  teal    difference < 0, archive holds more
+     .delta.positive   #b45309  amber   difference > 0, source holds more
+
+   Note this is SOURCE vs ARCHIVE, not "deleted vs archived". For the ANCHOR
+   sets, where every ObjectSpec has RequireArchiveForDelete = 1, an archived row
+   is also a deleted row, so the two readings coincide in effect - but the bar
+   plots sourceRows and archivedRows, and that is what the tooltip says. If
+   someone asks "so the green is what you deleted?", the accurate answer is
+   "the green is what is still in the WMS".
+
+   PROPER FIX: this belongs in the product's own stylesheet. The bundle name
+   carries a content hash (index-<hash>.css) which does NOT change when the file
+   is edited in place, so browsers keep serving the cached copy - hard-refresh
+   with Ctrl+F5 after applying. A redeploy of the console overwrites the file and
+   this block is lost, exactly like the deps.json native-asset patch.
+   ========================================================================== */
+
+/* --- 1. keep the existing legend on screen ----------------------------- */
+.bar-chart > .chart-legend {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #fff;
+  border-top: 1px solid #e3e7e5;
+  padding: 8px 0 2px;
+  margin-top: 2px;
+}
+
+/* --- 2. hover tooltip on every coloured bar ---------------------------- *
+   Anchored inside the row band (top:50%, translateY(-50%)) rather than above
+   the bar, because .bar-chart scrolls and therefore clips: a tooltip drawn
+   above the first visible row would be cut off. Kept short for the same
+   reason - .bar-track is the middle grid column, and long text would run out
+   of the card.                                                             */
+.bar.source::after,
+.bar.archive::after,
+.delta.positive::after,
+.delta.negative::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  z-index: 5;
+  white-space: nowrap;
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .12s ease-in-out;
+  pointer-events: none;
+}
+
+.bar.source:hover::after,
+.bar.archive:hover::after,
+.delta.positive:hover::after,
+.delta.negative:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.bar.source::after     { content: "Source \2014 still in the WMS"; }
+.bar.archive::after    { content: "Archived \2014 copy of record"; }
+.delta.negative::after { content: "Archive ahead of source"; }
+.delta.positive::after { content: "Source ahead \2014 not archived yet"; }
+
+/* Deliberately NOT done: giving zero-length bars a min-width so they can be
+   hovered. A table drained to zero would then draw a sliver that reads as
+   "a little left", which is precisely the thing the chart must not say. A row
+   at zero has no bar and no tooltip, and that is the honest rendering. */

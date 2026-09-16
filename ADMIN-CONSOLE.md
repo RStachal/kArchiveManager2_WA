@@ -26,7 +26,7 @@ Reaching it from another machine additionally needs an inbound firewall rule —
 see *Remote access* at the end. It is deliberately **not** open yet.
 
 This file records what the handover package needed before it would actually run,
-because six things in it do not match its own documentation. The authoritative
+because seven things in it do not match its own documentation. The authoritative
 procedure remains `04-runbooks/admin-console-iis-deployment.md`; read this first,
 then follow that.
 
@@ -66,7 +66,7 @@ with a payload.
 
 ---
 
-## Six corrections to the shipped package
+## Seven corrections to the shipped package
 
 ### 1. The native SQL driver is not resolved — BLOCKING
 
@@ -230,6 +230,62 @@ GRANT EXECUTE ON arch.usp_Api_DeleteConsoleOperator     TO karch_config_admin;
 
 After this, `operatorsConfigured: true` and `POST /api/security/unlock` returns an
 edit token.
+
+### 7. The dashboard chart legend is rendered where nobody can see it
+
+The bars on **Source vs Archived by table** are teal and amber with nothing on
+screen to say which is which, and the second chart, **Difference by table**, uses
+the same two colours for something else entirely. On a dashboard shown to an
+audience that is the first question asked and the worst one to answer by guessing.
+
+The legend is not missing. The bundle builds it:
+
+```jsx
+<div className="chart-legend">
+  <span><span className="legend-dot source"  />Source</span>
+  <span><span className="legend-dot archive" />Archived</span>
+</div>
+```
+
+and renders it as the **last child of `.bar-chart`** — which is
+`max-height: 460px; overflow-y: auto`. With twenty-odd configured tables it sits
+below the fold, so only someone who scrolls the chart to its very end ever sees
+it. `Difference by table` has no legend element at all.
+
+What the colours actually mean, read out of the stylesheet rather than inferred:
+
+| | | |
+|---|---|---|
+| `.bar.source` | `#0f766e` teal | rows still in the source database |
+| `.bar.archive` | `#d97706` amber | rows present in the archive |
+| `.delta.negative` | `#0f766e` teal | difference < 0 — **archive holds more** |
+| `.delta.positive` | `#b45309` amber | difference > 0 — source holds more |
+
+Two things worth knowing before explaining this on stage. It is **source versus
+archive, not deleted versus archived** — for the ANCHOR sets every `ObjectSpec`
+has `RequireArchiveForDelete = 1`, so an archived row is also a deleted row and
+the two readings coincide in effect, but the bar plots `sourceRows` and
+`archivedRows`. And on the difference chart **teal means negative**, which is the
+normal end state rather than a problem: the archive is ahead because the source
+rows are gone.
+
+**Fix** — [`console/chart-legend.css`](console/chart-legend.css) in this package.
+It pins the existing legend to the bottom of the scroll port and adds a hover
+tooltip to all four bar types, so the difference chart is covered too. CSS only;
+the JS bundle is not touched, which matters because the console ships minified
+with no source map and a broken bundle is a blank page.
+
+```powershell
+# elevated - the wwwroot ACLs refuse a normal user
+Get-Content <package>\console\chart-legend.css -Raw |
+  Add-Content 'C:\inetpub\kArchiveManager\AdminConsole\wwwroot\assets\index-PwqARZjk.css'
+```
+
+Then **Ctrl+F5**. The filename carries a content hash that does *not* change when
+the file is edited in place, so the browser keeps serving its cached copy. A
+console redeploy overwrites the file and the block is lost — same class of
+local patch as correction 1, and the same real answer: it belongs in the product's
+own stylesheet.
 
 ---
 
