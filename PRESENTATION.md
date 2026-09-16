@@ -12,6 +12,58 @@ else is detail.
 
 ## Before the room fills
 
+### The fastest reset: restore the four `_PresentationStart` backups
+
+The reference instance has a captured starting point — configuration intact,
+archive empty, both WMS databases full — as four verified FULL backups in the
+instance's default backup folder:
+
+```
+AAD_PresentationStart.bak                     124 MB
+ADV_PresentationStart.bak                      12 MB
+kArchiveManagerAdmin_PresentationStart.bak      7 MB
+kArchiveManagerBackups_PresentationStart.bak    1 MB
+```
+
+Restoring all four puts you back at the start in about fifteen seconds, and it is
+the only reset that is guaranteed self-consistent — the archive matches the source
+it was emptied against. Restore `AAD` and `ADV` with `SINGLE_USER WITH ROLLBACK
+IMMEDIATE ... WITH REPLACE`, then `MULTI_USER`.
+
+**Then re-run `053` and `051`, in that order, every single time.** A restore
+replaces every database principal: the runner and the console both lose their
+users in the restored database and nothing warns you. Check it took:
+
+```sql
+EXEC arch.usp_VerifyRunnerPrivileges;   -- must return 0
+EXECUTE AS LOGIN = N'IIS APPPOOL\kAM Admin Console';
+SELECT name, HAS_DBACCESS(name) FROM sys.databases
+WHERE name IN ('AAD','ADV','kArchiveManagerAdmin','kArchiveManagerBackups');
+REVERT;                                 -- every row must be 1
+```
+
+To rebuild that starting point from scratch instead — after a demo, or on another
+instance — use `sql/58_presentation_reset.sql`. It clears every record from
+`kArchiveManagerAdmin` while leaving the configuration untouched, and empties the
+archive tables without dropping them. It does **not** touch the WMS databases;
+those come from their own backup.
+
+**What the demo will move**, measured on this starting point:
+
+| set | eligible documents |
+|---|---:|
+| `ADV_LOGMSG_ARCH` | 58 473 |
+| `AAD_TRANLOG_ARCH` | 9 008 |
+| `AAD_ORDER_ARCH` | 334 |
+| `AAD_PO_ARCH` | 124 |
+| `AAD_PICKDETAIL_ARCH` | 56 |
+
+One caveat on the ADV figure: **Warehouse Advantage purges `t_log_message`
+itself**, at 30 days and a 100 000-row cap. The table shrinks on its own between
+the moment you restore and the moment you run, so expect the ADV number to be
+lower than the one above and do not treat the difference as rows the tool missed.
+It is the one set where the source moves without us.
+
 ### Know which data you are standing on
 
 The reference instance has held **two different data sets** in its life, and the
