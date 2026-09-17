@@ -15,6 +15,12 @@ runbook — eight phases with a stop condition on each, plus 7b (reporting) and 
 script, the measured numbers, and the four places a live walkthrough goes wrong —
 including a job that fails one second after it starts unless `55` has been run.
 
+**Speaking notes for a one-hour session:**
+[PREZENTACE-60MIN.md](PREZENTACE-60MIN.md) — in Czech, because it is what the
+presenter says out loud rather than what they type. Timing plan, the safety
+mechanisms in the order they land, which chart attributes to point at, and the
+questions an audience actually asks.
+
 **The Admin Console** (the web UI, an IIS application) is in
 [`kAM2/02-admin-console/`](kAM2/02-admin-console/), deployed and verified on this
 server at `http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the
