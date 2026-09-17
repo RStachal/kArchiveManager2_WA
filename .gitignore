@@ -12,9 +12,21 @@ _logs/
 
 # Ad-hoc parameterised copies of the product's own scripts (e.g. 053, which needs
 # a runtime password filled in). NEVER commit these - they hold credentials.
-*.RUN.sql
-*.RUN2.sql
-*_runtime.RUN.sql
+#
+# ANCHORED, not a bare *.RUN.sql. Git on Windows matches ignore patterns
+# case-insensitively, so the bare form also matched
+#   kAM2/01-database/source-objects/kArchiveManagerAdmin/Tables/arch.Run.sql
+# which is one of the 63 ":r" includes of the core deploy bundle. It sat on disk,
+# stayed out of the repository, and a clone therefore could not deploy the product
+# at all - the one failure a self-contained package must not have. Found
+# 2026-09-17 by listing the IGNORED files rather than trusting the rule.
+#
+# The parameterised copies only ever land at the repository root or in _work/,
+# so anchoring costs nothing and cannot reach into kAM2/.
+/*.RUN.sql
+/*.RUN2.sql
+/*_runtime.RUN.sql
+_work/*.RUN.sql
 
 # Local editor / OS noise
 .vs/
