@@ -18,7 +18,22 @@ Hodinová prezentace se tedy do jednoho nastartování vejde jen tak tak.
    po někom jiném.
 2. Po startu jednou otevřete `http://localhost:8089`, ať se app pool nahodí mimo
    pohled publika (startuje se na první požadavek).
-3. Zkontrolujte, že stojíte na výchozím bodu — archiv musí být prázdný:
+3. **Zkontrolujte, jestli je nasazená úprava grafů.** Bez ní je legenda
+   odscrollovaná pod dvaceti řádky tabulek, barvy nemají popisek a v záhlaví
+   prvního grafu svítí vývojářská poznámka „Inspired by SSRS chartProcessSummary".
+
+```powershell
+Select-String -Path 'C:\inetpub\kArchiveManager\AdminConsole\wwwroot\assets\index-PwqARZjk.css' `
+              -Pattern 'chart legend' -Quiet
+# False -> nasadit, z ELEVOVANeho PowerShellu, pak Ctrl+F5 v prohlizeci:
+Get-Content C:\kAMDeploy\chart-legend.css -Raw |
+  Add-Content 'C:\inetpub\kArchiveManager\AdminConsole\wwwroot\assets\index-PwqARZjk.css'
+```
+
+   Když se nasadit nedá, **nemluvte o legendě** a barvy vysvětlete slovy — obsah
+   bloku 4 na tom nestojí.
+
+4. Zkontrolujte, že stojíte na výchozím bodu — archiv musí být prázdný:
 
 ```sql
 SELECT Runs=(SELECT COUNT(*) FROM arch.Run),
@@ -271,7 +286,9 @@ ne chyba.
 
 - **tyrkysová = zdroj** (co je pořád ve WMS)
 - **jantarová = archiv** (co už je zkopírované)
-- legenda je dole v grafu, barvy mají po najetí myší popisek
+- legenda je připnutá dole v grafu a barvy mají po najetí myší popisek —
+  **jen pokud je nasazená úprava z kroku 3 v úvodu.** Bez ní legenda existuje, ale
+  je odscrollovaná pod všemi řádky, takže na ni neukazujte a barvy prostě řekněte
 
 Pozor na formulaci: je to **zdroj vs. archiv**, ne „smazané vs. zálohované".
 Protože ale platí, že archivovaný řádek je zároveň smazaný, vyjde to nastejno —
@@ -303,9 +320,32 @@ SELECT p.ProcessCode, wb.Status,
 FROM arch.WorkBatch wb JOIN arch.Process p ON p.ProcessId=wb.ProcessId;
 ```
 
-Očekávejte **5 sad a 67 995 klíčů**. Řekněte, co se právě stalo: *„Zatím se nic
-nesmazalo. Systém si jen vypsal seznam dokumentů, které pravidlům vyhovují, a
-uložil ho. Až doteď je to čistě čtení."*
+Očekávejte **5 sad**. Čísla klíčů z AAD jsou stabilní a můžete je slíbit dopředu:
+
+| sada | klíčů |
+|---|---:|
+| `AAD_ORDER_ARCH` | 334 |
+| `AAD_PICKDETAIL_ARCH` | 56 |
+| `AAD_PO_ARCH` | 124 |
+| `AAD_TRANLOG_ARCH` | 9 008 |
+| `ADV_LOGMSG_ARCH` | **desítky tisíc — mění se** |
+
+**ADV číslo nepředpovídejte.** Aplikace do toho logu průběžně zapisuje a zároveň
+si ho sama maže po 30 dnech, takže se okno posouvá mezi jednotlivými dny i
+hodinami: 58 473 při psaní tohoto podkladu, 42 566 o den později. Není to chyba
+výběru, je to jediná tabulka, která se hýbe i bez nás — a je z toho mimochodem
+dobrá historka o tom, proč má ADV retenci 23 a ne 90 dní.
+
+Chcete-li přesné číslo do řeči, zjistěte si ho těsně před prezentací:
+
+```sql
+SELECT COUNT_BIG(*) FROM ADV.dbo.t_log_message
+WHERE TRY_CONVERT(datetime2, logged_on_utc) AT TIME ZONE N'UTC' AT TIME ZONE N'UTC'
+      < DATEADD(MINUTE, -1440, DATEADD(DAY, -23, CONVERT(datetime2(0), SYSUTCDATETIME())));
+```
+
+Řekněte, co se právě stalo: *„Zatím se nic nesmazalo. Systém si jen vypsal seznam
+dokumentů, které pravidlům vyhovují, a uložil ho. Až doteď je to čistě čtení."*
 
 **Sad je pět, ne šest, a je to správně** — fronta práce je TIMESTAMP a připraví se
 až při běhu. Čekejte na ten dotaz.
