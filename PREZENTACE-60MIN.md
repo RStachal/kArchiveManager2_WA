@@ -365,9 +365,36 @@ a uloží klíče. Pořadí pro demo je tedy *odhad → PREP → přesné čísl
 mezi druhým a třetím krokem můžete říct: *„zatím se nesmazalo nic, a už přesně
 víme, co se smaže."*
 
-Ověřeno, že obě čísla sedí: DERIVED a EXACT se na všech tabulkách AAD shodly do
-posledního řádku. Sada fronty práce zůstane `DERIVED` i po PREP — je TIMESTAMP a
-PREP připravuje jen ANCHOR sady.
+**Ověřeno celým cyklem**, ne úvahou. Projekce → PREP → projekce → RUN → porovnání
+se skutečným obsahem archivu:
+
+| | |
+|---|---:|
+| projekce před PREP (`DERIVED`) | 17 878 |
+| projekce po PREP (`EXACT`) | 17 878, identická |
+| skutečně archivováno | **17 878**, divergence 0 |
+| porovnání po tabulkách | **shoda na všech 23** |
+
+Sada fronty práce zůstane `DERIVED` i po PREP — je TIMESTAMP a PREP připravuje jen
+ANCHOR sady.
+
+### Čtyři sady AAD dávají 17 878 vždy. ADV je proměnná.
+
+Tohle je jediné, co vám může rozhodit slíbené číslo, takže to mějte v hlavě:
+
+| kdy | ADV způsobilých | celkem |
+|---|---:|---:|
+| hned po obnově záloh | 58 678 | 76 556 |
+| po pár hodinách běhu | klesá | klesá |
+| po delší době | 0 | 17 878 |
+
+Součet ze čtyř sad AAD je **17 878 za všech okolností** — ověřeno opakovaně.
+Všechno, co se hýbe, je ADV, protože jeho log si WMS maže sám a ukrajuje přesně
+ty nejstarší řádky, které bychom brali.
+
+**Praktický důsledek:** číslo si vytiskněte **těsně před** tím, než pustíte PREP,
+ne hodinu předem. A když chcete slíbit něco, co jistě vyjde, slibte **17 878 ze
+čtyř sad AAD** a ADV komentujte až podle toho, co zrovna ukáže.
 
 ### PREP
 
