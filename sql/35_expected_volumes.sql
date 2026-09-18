@@ -93,6 +93,42 @@ WHILE @@FETCH_STATUS = 0
 BEGIN
     SET @cut = DATEADD(MINUTE, -@lag, DATEADD(DAY, -@retention, CONVERT(datetime2(0), SYSUTCDATETIME())));
 
+    ------------------------------------------------------------------------
+    -- SAFETY GATE - run BEFORE anything is concatenated into dynamic SQL.
+    --
+    -- This script composes its queries from configuration TEXT: join predicates,
+    -- gates, timestamp expressions, key expressions. That is the same thing the
+    -- runtime does, so it inherits the same exposure, and it gets the same
+    -- defence: arch.usp_AssertSafeSqlExpression, the product's own gate. It
+    -- refuses statements, comments, DDL/DML keywords, procedure calls and
+    -- subqueries, and THROWs 50400 rather than returning a verdict.
+    --
+    -- Without this a row edited straight into arch.ObjectSpec - past the API,
+    -- which is how five specs appeared here on 2026-09-15 - could put anything it
+    -- liked into a query this script then executes. A counting script must not be
+    -- the weakest door in the building.
+    ------------------------------------------------------------------------
+    DECLARE @frag nvarchar(max), @fragName nvarchar(200);
+    DECLARE cV CURSOR LOCAL FAST_FORWARD FOR
+        SELECT N'Process.AnchorTimestampExpr',   p.AnchorTimestampExpr   FROM arch.Process p WHERE p.ProcessId = @pid AND NULLIF(LTRIM(RTRIM(p.AnchorTimestampExpr)), N'')   IS NOT NULL
+        UNION ALL
+        SELECT N'Process.AnchorExtraWhereSql',   p.AnchorExtraWhereSql   FROM arch.Process p WHERE p.ProcessId = @pid AND NULLIF(LTRIM(RTRIM(p.AnchorExtraWhereSql)), N'')   IS NOT NULL
+        UNION ALL
+        SELECT N'ProcessKeySpec.SourceExpressionSql', ks.SourceExpressionSql FROM arch.ProcessKeySpec ks WHERE ks.ProcessId = @pid
+        UNION ALL
+        SELECT N'ObjectSpec.JoinToAnchorPredicateSql', o.JoinToAnchorPredicateSql FROM arch.ObjectSpec o WHERE o.ProcessId = @pid AND NULLIF(LTRIM(RTRIM(o.JoinToAnchorPredicateSql)), N'') IS NOT NULL
+        UNION ALL
+        SELECT N'ObjectSpec.AdditionalWhereSql', o.AdditionalWhereSql FROM arch.ObjectSpec o WHERE o.ProcessId = @pid AND NULLIF(LTRIM(RTRIM(o.AdditionalWhereSql)), N'') IS NOT NULL
+        UNION ALL
+        SELECT N'ObjectSpec.TimestampExpr', o.TimestampExpr FROM arch.ObjectSpec o WHERE o.ProcessId = @pid AND NULLIF(LTRIM(RTRIM(o.TimestampExpr)), N'') IS NOT NULL;
+    OPEN cV; FETCH NEXT FROM cV INTO @fragName, @frag;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        EXEC arch.usp_AssertSafeSqlExpression @Expression = @frag, @FieldName = @fragName;
+        FETCH NEXT FROM cV INTO @fragName, @frag;
+    END;
+    CLOSE cV; DEALLOCATE cV;
+
     -- EXACT when this process has keys that are still to be processed.
     -- Status 0 = prepared, 1 = claimed. 2 = done and 5 = parked by a legal hold,
     -- and neither will move, so neither is counted.
