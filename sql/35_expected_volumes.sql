@@ -57,6 +57,16 @@ CREATE TABLE #Vol (
     Note         nvarchar(200) NULL
 );
 
+IF OBJECT_ID('tempdb..#Tab') IS NOT NULL DROP TABLE #Tab;
+CREATE TABLE #Tab (
+    ProcessCode  sysname NOT NULL,
+    SourceDb     sysname NOT NULL,
+    SourceSchema sysname NOT NULL,
+    SourceTable  sysname NOT NULL,
+    SpecCount    int     NOT NULL,
+    DistinctRows bigint  NULL
+);
+
 IF OBJECT_ID('tempdb..#Doc') IS NOT NULL DROP TABLE #Doc;
 CREATE TABLE #Doc (
     ProcessCode sysname     NOT NULL,
@@ -212,13 +222,18 @@ BEGIN
     FETCH NEXT FROM cO INTO @oOrder, @oSchema, @oTable, @oJoin, @oWhere;
     WHILE @@FETCH_STATUS = 0
     BEGIN
+        -- EXISTS, not INNER JOIN. The question is "how many ROWS leave this
+        -- table", and a join counts MATCHES: a source row that matches several
+        -- key rows would be counted several times even though it is deleted once.
+        -- EXISTS counts each source row at most once, which is the same thing the
+        -- DELETE does.
         SET @rows = NULL;
         BEGIN TRY
             SET @sql = N'SELECT @n = COUNT_BIG(*)
                          FROM ' + QUOTENAME(@srcDb) + N'.' + QUOTENAME(@oSchema) + N'.' + QUOTENAME(@oTable) + N' t WITH (NOLOCK)
-                         INNER JOIN ' + @keyQuery + N' AS k ON ' + @oJoin
+                         WHERE EXISTS (SELECT 1 FROM ' + @keyQuery + N' AS k WHERE ' + @oJoin + N')'
                        + CASE WHEN NULLIF(LTRIM(RTRIM(@oWhere)), N'') IS NULL THEN N''
-                              ELSE N' WHERE (' + @oWhere + N')' END + N';';
+                              ELSE N' AND (' + @oWhere + N')' END + N';';
             EXEC sys.sp_executesql @sql, N'@cut datetime2(0), @n bigint OUTPUT', @cut = @cut, @n = @rows OUTPUT;
         END TRY
         BEGIN CATCH
@@ -232,6 +247,53 @@ BEGIN
         FETCH NEXT FROM cO INTO @oOrder, @oSchema, @oTable, @oJoin, @oWhere;
     END;
     CLOSE cO; DEALLOCATE cO;
+
+    ------------------------------------------------------------------------
+    -- Per TABLE, not per ObjectSpec - and they are not the same number.
+    --
+    -- A table can be configured more than once in a set. t_work_q_dependency is,
+    -- deliberately: once joined on parent_work_q_id, once on dependent_work_q_id,
+    -- so both sides of a dependency leave with their queue. Adding the two counts
+    -- OVERSTATES the table, because a row whose parent AND dependent are both in
+    -- the candidate set satisfies both predicates - and the first delete takes it,
+    -- leaving the second nothing. Measured here: 273 + 274 predicate matches over
+    -- 276 distinct rows, so the sum was 271 too high.
+    --
+    -- The archive receives DISTINCT rows, so count them that way: a row leaves if
+    -- it matches ANY of the table's predicates.
+    ------------------------------------------------------------------------
+    DECLARE @dSchema sysname, @dTable sysname, @pred nvarchar(max), @specs int;
+    DECLARE cD CURSOR LOCAL FAST_FORWARD FOR
+        SELECT o.SourceSchema, o.SourceTable, COUNT(*)
+        FROM arch.ObjectSpec o WHERE o.ProcessId = @pid
+        GROUP BY o.SourceSchema, o.SourceTable;
+    OPEN cD; FETCH NEXT FROM cD INTO @dSchema, @dTable, @specs;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        SET @pred = NULL;
+        SELECT @pred = COALESCE(@pred + N' OR ', N'')
+                     + N'(EXISTS (SELECT 1 FROM ' + @keyQuery + N' AS k WHERE ' + o.JoinToAnchorPredicateSql + N')'
+                     + CASE WHEN NULLIF(LTRIM(RTRIM(o.AdditionalWhereSql)), N'') IS NULL THEN N''
+                            ELSE N' AND (' + o.AdditionalWhereSql + N')' END + N')'
+        FROM arch.ObjectSpec o
+        WHERE o.ProcessId = @pid AND o.SourceSchema = @dSchema AND o.SourceTable = @dTable;
+
+        SET @rows = NULL;
+        BEGIN TRY
+            SET @sql = N'SELECT @n = COUNT_BIG(*) FROM ' + QUOTENAME(@srcDb) + N'.' + QUOTENAME(@dSchema) + N'.' + QUOTENAME(@dTable)
+                     + N' t WITH (NOLOCK) WHERE ' + @pred + N';';
+            EXEC sys.sp_executesql @sql, N'@cut datetime2(0), @n bigint OUTPUT', @cut = @cut, @n = @rows OUTPUT;
+        END TRY
+        BEGIN CATCH
+            SET @rows = NULL;
+        END CATCH;
+
+        INSERT #Tab (ProcessCode, SourceDb, SourceSchema, SourceTable, SpecCount, DistinctRows)
+        VALUES (@code, @srcDb, @dSchema, @dTable, @specs, @rows);
+
+        FETCH NEXT FROM cD INTO @dSchema, @dTable, @specs;
+    END;
+    CLOSE cD; DEALLOCATE cD;
 
     FETCH NEXT FROM cP INTO @pid, @code, @strategy, @srcDb, @retention, @lag,
                             @anchorSchema, @anchorTable, @anchorTs, @anchorWhere;
@@ -350,21 +412,31 @@ SELECT Section = 'D_ARCHIVE_AFTER',
        Incoming     = ISNULL(v.Incoming, 0),
        RowsAfter    = a.RowsNow + ISNULL(v.Incoming, 0)
 FROM #ArcNow a
-LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(ExpectedRows, 0))
-           FROM #Vol GROUP BY SourceDb, SourceTable) v
+LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(DistinctRows, 0))
+           FROM #Tab GROUP BY SourceDb, SourceTable) v
        ON v.SourceDb = a.ArchiveSchema AND v.SourceTable = a.ArchiveTable
 ORDER BY RowsAfter DESC, a.ArchiveTable;
 
 SELECT Section = 'D_ARCHIVE_TOTAL',
        TablesInArchive = (SELECT COUNT(*) FROM #ArcNow),
        RowsNow         = (SELECT SUM(RowsNow) FROM #ArcNow),
-       Incoming        = (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol),
-       RowsAfter       = (SELECT SUM(RowsNow) FROM #ArcNow) + (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol),
+       Incoming        = (SELECT SUM(ISNULL(DistinctRows, 0)) FROM #Tab),
+       RowsAfter       = (SELECT SUM(RowsNow) FROM #ArcNow) + (SELECT SUM(ISNULL(DistinctRows, 0)) FROM #Tab),
        TablesStillEmpty= (SELECT COUNT(*) FROM #ArcNow a
-                          LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(ExpectedRows,0))
-                                     FROM #Vol GROUP BY SourceDb, SourceTable) v
+                          LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(DistinctRows,0))
+                                     FROM #Tab GROUP BY SourceDb, SourceTable) v
                                  ON v.SourceDb = a.ArchiveSchema AND v.SourceTable = a.ArchiveTable
                           WHERE a.RowsNow + ISNULL(v.Incoming, 0) = 0);
+
+-- Where B and D disagree, and why. B sums ObjectSpecs; D counts rows. They differ
+-- only where one table is configured more than once, and the difference is the
+-- overlap between those predicates - rows the first delete takes and the second
+-- never sees. If this is not zero, D is the number to quote.
+SELECT Section = 'D_RECONCILE',
+       PerSpecSum   = (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol),
+       DistinctRows = (SELECT SUM(ISNULL(DistinctRows, 0)) FROM #Tab),
+       OverlapDropped = (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol) - (SELECT SUM(ISNULL(DistinctRows, 0)) FROM #Tab),
+       TablesConfiguredTwice = (SELECT COUNT(*) FROM #Tab WHERE SpecCount > 1);
 
 PRINT '';
 PRINT 'Basis = EXACT  : counted from the prepared keys. This IS what the run will move.';
