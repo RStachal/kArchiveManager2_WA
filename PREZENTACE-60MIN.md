@@ -306,6 +306,37 @@ Otevřete jednu sadu a ukažte tři věci, víc ne:
 2. **`JoinToAnchorPredicateSql`** — jak dítě najde svou hlavičku
 3. **brána** (`AnchorExtraWhereSql`) — co přežije
 
+### Kolik dat čekáme — ještě než se cokoliv stane
+
+Silný moment, protože číslo řeknete **dopředu** a pak ho splníte.
+
+V konzoli je **Analysis & Estimates**, ale pozor na to, co ukazuje: velikost
+nakonfigurovaných tabulek, potřebné místo v archivu a v logu a limity na jeden
+běh. **Neukazuje, kolik řádků odejde** — u objednávek hlásí `t_order` 843 řádků,
+zatímco způsobilých je 334. Odpovídá na „jak je to velké", ne na „co se přenese".
+Obojí ukažte, ale rozlište to.
+
+Na druhou otázku slouží:
+
+```
+sql\35_expected_volumes.sql
+```
+
+Vrátí počty **po jednotlivých tabulkách** a navíc sloupec `Basis`:
+
+- **`DERIVED`** — bez PREP. Znovu aplikuje bránu a cutoff na zdroj.
+- **`EXACT`** — po PREP. Počítá z reálných připravených klíčů; není to odhad, ale
+  přesně ty řádky, kterých se běh dotkne.
+
+**PREP nutný není**, ale vyplatí se: nic nemaže a nic nezapisuje do WMS, jen čte
+a uloží klíče. Pořadí pro demo je tedy *odhad → PREP → přesné číslo → RUN*, a
+mezi druhým a třetím krokem můžete říct: *„zatím se nesmazalo nic, a už přesně
+víme, co se smaže."*
+
+Ověřeno, že obě čísla sedí: DERIVED a EXACT se na všech tabulkách AAD shodly do
+posledního řádku. Sada fronty práce zůstane `DERIVED` i po PREP — je TIMESTAMP a
+PREP připravuje jen ANCHOR sady.
+
 ### PREP
 
 ```sql
@@ -320,29 +351,45 @@ SELECT p.ProcessCode, wb.Status,
 FROM arch.WorkBatch wb JOIN arch.Process p ON p.ProcessId=wb.ProcessId;
 ```
 
-Očekávejte **5 sad**. Čísla klíčů z AAD jsou stabilní a můžete je slíbit dopředu:
+Očekávejte **5 sad**. Čísla ze čtyř AAD sad jsou stabilní a můžete je slíbit
+dopředu:
 
-| sada | klíčů |
+| sada | dokumentů |
 |---|---:|
-| `AAD_ORDER_ARCH` | 334 |
-| `AAD_PICKDETAIL_ARCH` | 56 |
-| `AAD_PO_ARCH` | 124 |
 | `AAD_TRANLOG_ARCH` | 9 008 |
-| `ADV_LOGMSG_ARCH` | **desítky tisíc — mění se** |
+| `AAD_ORDER_ARCH` | 334 |
+| `AAD_PO_ARCH` | 124 |
+| `AAD_PICKDETAIL_ARCH` | 56 |
+| `ADV_LOGMSG_ARCH` | **nepředvídatelné, klidně 0 — viz níže** |
 
-**ADV číslo nepředpovídejte.** Aplikace do toho logu průběžně zapisuje a zároveň
-si ho sama maže po 30 dnech, takže se okno posouvá mezi jednotlivými dny i
-hodinami: 58 473 při psaní tohoto podkladu, 42 566 o den později. Není to chyba
-výběru, je to jediná tabulka, která se hýbe i bez nás — a je z toho mimochodem
-dobrá historka o tom, proč má ADV retenci 23 a ne 90 dní.
+### ADV nestavte demo na tom, změřeno
 
-Chcete-li přesné číslo do řeči, zjistěte si ho těsně před prezentací:
+Log v ADV si **Warehouse Advantage maže sám** a dělá to rychleji, než ho stihneme
+archivovat. Naměřeno na tomhle stroji:
 
-```sql
-SELECT COUNT_BIG(*) FROM ADV.dbo.t_log_message
-WHERE TRY_CONVERT(datetime2, logged_on_utc) AT TIME ZONE N'UTC' AT TIME ZONE N'UTC'
-      < DATEADD(MINUTE, -1440, DATEADD(DAY, -23, CONVERT(datetime2(0), SYSUTCDATETIME())));
-```
+| kdy | způsobilých řádků |
+|---|---:|
+| 16. 9. | 58 473 |
+| 17. 9. | 42 566 |
+| 18. 9. ráno | 3 060 |
+| 18. 9., **o dvě minuty později** | **0** |
+
+Ten poslední řádek není překlep. PREP připravil 3 060 klíčů, a než jsem stihl
+spočítat, kolik řádků jim ve zdroji odpovídá, vendorový purge je smazal všechny.
+Tabulka sedí na stropu 100 000 řádků, aplikace do ní zapisuje nepřetržitě a úklid
+ukrajuje odspodu — tedy přesně ty nejstarší řádky, které bychom brali my.
+
+**Pro prezentaci z toho plyne:** vést demo na sadách AAD, ADV zmínit jako
+zajímavost. Pokud ADV ukáže nulu, není to chyba a máte na to lepší odpověď než
+omluvu:
+
+> *„Tenhle log si WMS uklízí sám a je v tom rychlejší než my. Proto archivátor
+> u téhle sady sám snížil retenci z 90 na 23 dní — kdyby zůstala na 90, vybíral by
+> řádky, které aplikace dávno smazala, a navždy by hlásil úspěch s nulou. Nástroj
+> tenhle konflikt pozná a ustoupí."*
+
+Je to zároveň důvod, proč graf rozdílů ukazuje u ADV záporné číslo: archiv drží
+víc než zdroj, protože zdroj se pod ním vyprazdňuje.
 
 Řekněte, co se právě stalo: *„Zatím se nic nesmazalo. Systém si jen vypsal seznam
 dokumentů, které pravidlům vyhovují, a uložil ho. Až doteď je to čistě čtení."*
