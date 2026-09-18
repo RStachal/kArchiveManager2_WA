@@ -306,6 +306,38 @@ Otevřete jednu sadu a ukažte tři věci, víc ne:
 2. **`JoinToAnchorPredicateSql`** — jak dítě najde svou hlavičku
 3. **brána** (`AnchorExtraWhereSql`) — co přežije
 
+### Validace → Indexy: nástroj si indexy neřekne sám, ale poradí
+
+Dobrá obrazovka, protože ukazuje zdrženlivost, ne schopnost.
+
+Aplikace si eviduje, které indexy by její konfigurace potřebovala
+(`arch.IndexRequirement`), a proti skutečnému schématu WMS je kontroluje. Na téhle
+instanci hlásí **6 nálezů**, všechny jako `WARN`, a ke každému vygeneruje hotové
+DDL, například:
+
+```sql
+USE [AAD]; CREATE NONCLUSTERED INDEX [IX_kAM_JOIN_dbo_t_pack]
+  ON [dbo].[t_pack] ([wh_id],[order_number]);
+```
+
+Tři věci k tomu řekněte, protože každá z nich odpovídá na jinou obavu:
+
+1. **Chybějící index nikdy nezablokuje běh.** V kódu je to napsané výslovně —
+   „a missing supporting index must NEVER block processing". Povinný index
+   (`IsMandatory = 1`) by dal `ERROR`; z těch šesti není povinný ani jeden.
+2. **Nástroj ten index nevytvoří.** Jen ho napíše. Vytvoření je rozhodnutí DBA
+   zákazníka — a to je právě to pravidlo, které vzniklo po incidentu
+   s filtrovaným indexem. Tady se to pěkně sejde: vedle sebe stojí tlačítko
+   s návrhem a pravidlo, že ho nemačkáme my.
+3. **Ani ten návrh neberte doslova.** Sám kód říká, že pořadí sloupců a kvalita
+   seeku si zaslouží ruční posouzení; je to připravený začátek, ne hotová
+   odpověď.
+
+Jedna věc, aby vás nepřekvapila: **indexová validace je samostatná.**
+`usp_ValidateConfiguration` ji nevolá, takže dlaždice *Config validation* na
+dashboardu ukazuje **1 warning** (ten známý u ADV) a ne sedm. Nejsou to
+protichůdná čísla, jsou to dvě různé kontroly na dvou obrazovkách.
+
 ### Kolik dat čekáme — ještě než se cokoliv stane
 
 Silný moment, protože číslo řeknete **dopředu** a pak ho splníte.
@@ -515,6 +547,22 @@ Blok 3, bod 8. Ukažte tu větu o „success is never inferred".
 
 **„Dostaneme data zpátky?"**
 Ano, a právo k tomu je záměrně odepřené.
+
+**„Co když nám archivní databáze zmizí? Pamatuje si konzole aspoň ta čísla?"**
+Ne, a je dobře, že ne. Grafy se počítají **živě** ze `sys.partitions` obou
+databází, nic se necachuje. Kdyby archiv zmizel, konzole nespadne — sloupce
+archivu spadnou na nulu a rozsvítí se příznak, že objekt chybí (to je signál
+*Object availability*). Konzole umí rozlišit „tabulka je prázdná" od „tabulka
+tam není".
+
+Co **přežije**, je historie operací: `arch.Run`, `RunItem`, `RunItemObject` a
+`RunDocAudit` leží v Admin databázi, takže by pořád tvrdily, kolik řádků bylo kdy
+archivováno. **Konzole si pamatuje operace, ne obsah.**
+
+A právě proto nejsou zálohy archivní databáze volitelné: po smazání zdrojového
+řádku je archiv jeho jedinou kopií a v Admin databázi žádná druhá není. Ta
+kombinace — audit, který tvrdí, že řádky existují, a archiv, který je nemá — je
+ten nejhorší možný stav a jediné, co mu brání, jsou ty dva zálohovací joby.
 
 **„Kdo to bude obsluhovat?"**
 Operátor, přes konzoli, bez přístupu do databáze.
