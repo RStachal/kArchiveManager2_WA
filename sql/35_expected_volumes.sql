@@ -310,6 +310,62 @@ SELECT Section = 'C_STAYS', ProcessCode, AnchorTable, TotalRows, Leaving = Eligi
        Comment = N'rows held back by the gate or still inside the retention window'
 FROM @stay ORDER BY ProcessCode;
 
+------------------------------------------------------------------------------
+-- D) What the ARCHIVE will hold once PREP and RUN have finished
+--
+--    archive now + rows coming in. The arithmetic is only this simple because
+--    the archive is append-only in Mode 1: the run never updates or deletes
+--    there, it only inserts what it is about to remove from the source. So the
+--    projection is addition, not a model.
+--
+--    Where it can be wrong, and it is worth knowing which way:
+--      * the run is capped per invocation (NextRunControlLimit), so a set with
+--        more eligible documents than its cap needs more than one run and the
+--        first one lands SHORT of this number;
+--      * the source can lose rows before the run reaches them - the ADV log does
+--        exactly that, its own purge deletes what we were going to take, so that
+--        line can land LOW;
+--      * a legal hold added between counting and running parks its keys.
+--    It never lands HIGH: nothing here can archive a row that was not counted.
+------------------------------------------------------------------------------
+PRINT '';
+PRINT '=== D) Rows in the archive database after PREP and RUN complete ===';
+
+DECLARE @arcDb sysname = (SELECT TOP 1 pd.ArchiveDb FROM arch.ProcessDatabase pd WHERE pd.IsEnabled = 1);
+
+IF OBJECT_ID('tempdb..#ArcNow') IS NOT NULL DROP TABLE #ArcNow;
+CREATE TABLE #ArcNow (ArchiveSchema sysname, ArchiveTable sysname, RowsNow bigint);
+SET @sql = N'SELECT s.name, t.name, ISNULL(SUM(p.rows),0)
+             FROM ' + QUOTENAME(@arcDb) + N'.sys.tables t
+             JOIN ' + QUOTENAME(@arcDb) + N'.sys.schemas s ON s.schema_id = t.schema_id
+             JOIN ' + QUOTENAME(@arcDb) + N'.sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+             GROUP BY s.name, t.name;';
+INSERT #ArcNow EXEC sys.sp_executesql @sql;
+
+-- The archive schema is the source database name; the archive table keeps the
+-- source table name. That is the convention {SourceDb} in ObjectSpec resolves to.
+SELECT Section = 'D_ARCHIVE_AFTER',
+       ArchiveTable = a.ArchiveSchema + '.' + a.ArchiveTable,
+       RowsNow      = a.RowsNow,
+       Incoming     = ISNULL(v.Incoming, 0),
+       RowsAfter    = a.RowsNow + ISNULL(v.Incoming, 0)
+FROM #ArcNow a
+LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(ExpectedRows, 0))
+           FROM #Vol GROUP BY SourceDb, SourceTable) v
+       ON v.SourceDb = a.ArchiveSchema AND v.SourceTable = a.ArchiveTable
+ORDER BY RowsAfter DESC, a.ArchiveTable;
+
+SELECT Section = 'D_ARCHIVE_TOTAL',
+       TablesInArchive = (SELECT COUNT(*) FROM #ArcNow),
+       RowsNow         = (SELECT SUM(RowsNow) FROM #ArcNow),
+       Incoming        = (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol),
+       RowsAfter       = (SELECT SUM(RowsNow) FROM #ArcNow) + (SELECT SUM(ISNULL(ExpectedRows, 0)) FROM #Vol),
+       TablesStillEmpty= (SELECT COUNT(*) FROM #ArcNow a
+                          LEFT JOIN (SELECT SourceDb, SourceTable, Incoming = SUM(ISNULL(ExpectedRows,0))
+                                     FROM #Vol GROUP BY SourceDb, SourceTable) v
+                                 ON v.SourceDb = a.ArchiveSchema AND v.SourceTable = a.ArchiveTable
+                          WHERE a.RowsNow + ISNULL(v.Incoming, 0) = 0);
+
 PRINT '';
 PRINT 'Basis = EXACT  : counted from the prepared keys. This IS what the run will move.';
 PRINT 'Basis = DERIVED: the gate and cutoff re-applied to the source. Run PREP and';

@@ -24,7 +24,7 @@ questions an audience actually asks.
 **The Admin Console** (the web UI, an IIS application) is in
 [`kAM2/02-admin-console/`](kAM2/02-admin-console/), deployed and verified on this
 server at `http://localhost:8089`. [ADMIN-CONSOLE.md](ADMIN-CONSOLE.md) records the
-seven corrections it needed, three of them permission gaps the shipped scripts do
+eight corrections it needed, three of them permission gaps the shipped scripts do
 not close, two of which fail silently — plus a dashboard legend the bundle renders
 below the fold of a scrolling chart, so nobody has ever seen it.
 

@@ -26,7 +26,7 @@ Reaching it from another machine additionally needs an inbound firewall rule —
 see *Remote access* at the end. It is deliberately **not** open yet.
 
 This file records what the handover package needed before it would actually run,
-because seven things in it do not match its own documentation. The authoritative
+because eight things in it do not match its own documentation. The authoritative
 procedure remains `04-runbooks/admin-console-iis-deployment.md`; read this first,
 then follow that.
 
@@ -66,7 +66,7 @@ with a payload.
 
 ---
 
-## Seven corrections to the shipped package
+## Eight corrections to the shipped package
 
 ### 1. The native SQL driver is not resolved — BLOCKING
 
@@ -286,6 +286,43 @@ the file is edited in place, so the browser keeps serving its cached copy. A
 console redeploy overwrites the file and the block is lost — same class of
 local patch as correction 1, and the same real answer: it belongs in the product's
 own stylesheet.
+
+### 8. Analysis & Estimates shows nothing but zeros — a DMV permission
+
+The screen renders, the rows are there, every number is `0.00` and every process
+reports `missingTableCount` equal to its table count. Run the same procedure as a
+sysadmin and it returns real figures, which is the tell — this is correction 4 all
+over again, in a different place.
+
+```
+EXECUTE AS LOGIN = N'IIS APPPOOL\kAM Admin Console';
+EXEC arch.usp_Api_EstimateNextRunImpact;
+-- Msg 262: VIEW DATABASE PERFORMANCE STATE permission denied in database 'AAD'.
+```
+
+`arch.usp_Api_EstimateNextRunImpact` sizes the configured tables from
+`sys.dm_db_partition_stats`. On SQL Server 2022 that DMV needs **`VIEW DATABASE
+PERFORMANCE STATE`**, which `db_datareader` does not carry and which `051` does not
+grant. The procedure cannot read the stats, concludes the tables are not there,
+and reports zeros rather than failing — so nothing in the UI says a permission is
+missing.
+
+Grant it in every source database and the archive:
+
+```sql
+USE [AAD];                    GRANT VIEW DATABASE PERFORMANCE STATE TO [IIS APPPOOL\kAM Admin Console];
+USE [ADV];                    GRANT VIEW DATABASE PERFORMANCE STATE TO [IIS APPPOOL\kAM Admin Console];
+USE [kArchiveManagerBackups]; GRANT VIEW DATABASE PERFORMANCE STATE TO [IIS APPPOOL\kAM Admin Console];
+```
+
+Read-only and metadata-only: it reveals sizes and statistics, not data. After it,
+`missingTableCount` drops to 0 and the screen fills.
+
+This is the **third** permission that `051` should hand the console and does not,
+after the five `karch_*` roles (correction 4) and the msdb reads (correction 5).
+All three share a shape worth naming: the console degrades to a wrong answer
+rather than an error, so **every console screen has to be checked as the app-pool
+identity**. A sysadmin sees a working product.
 
 ---
 
