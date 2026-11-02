@@ -119,6 +119,10 @@ foreach ($p in @('console\Deploy-Console.ps1',
 # aplikace jde do .\app, kde si ji skripty najdou samy
 Add-Item2 'kAM2\02-admin-console\app' $co -As 'app'
 if (Test-Path (Join-Path $co 'app\logs')) { Remove-Item (Join-Path $co 'app\logs') -Recurse -Force }
+# DEPLOYMENT_SUMMARY.txt generuje publikacni skript, beh aplikace ho nepouziva
+# a nese osobni cestu vcetne uzivatelskeho jmena - do balicku pro zakaznika nepatri.
+$ds = Join-Path $co 'app\DEPLOYMENT_SUMMARY.txt'
+if (Test-Path $ds) { Remove-Item $ds -Force; Ok 'DEPLOYMENT_SUMMARY.txt odstranen (osobni cesta)' }
 
 # Nativni ovladac SqlClientu musi byt v korenu aplikace - NuGet ho uklada do
 # runtimes\win-x64\native\, odkud si ho framework-dependent nasazeni nenajde.

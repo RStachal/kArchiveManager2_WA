@@ -25,7 +25,7 @@
     konzole potrebuje -AuthMode.
 
 .EXAMPLE
-    # jen stahnout a rozbalit do C:\kAM2
+    # jen stahnout a rozbalit do C:\KODYS\kAM2
     .\Get-kAM2.ps1
 
 .EXAMPLE
@@ -40,7 +40,7 @@
 param(
     [ValidateSet('Database', 'Console', 'Both')]
     [string] $Part        = 'Both',
-    [string] $TargetDir   = 'C:\kAM2',
+    [string] $TargetDir   = 'C:\KODYS\kAM2',
     [string] $Branch      = 'main',
 
     [switch] $Deploy,
