@@ -1,0 +1,349 @@
+<title>k.Archive Manager 2.0</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single-column newsletter, 68ch measure, sections split by hairline rules.
+   Palette taken from the product's own console: teal = source, amber = archive. */
+:root{
+  --paper:#fbfaf8;
+  --card:#ffffff;
+  --ink:#1b2220;
+  --muted:#5c6b66;
+  --rule:#dde3e0;
+  --source:#0f766e;   /* console .bar.source  */
+  --archive:#c2700a;  /* console .bar.archive */
+  --flag:#9a3412;
+  --wash:#eef2f1;
+  --brandmark:#002e5a; /* KODYS navy; reversed to light ink on dark paper */
+  --display:"Bitter",Georgia,"Times New Roman",serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#121715; --card:#1a211f; --ink:#e8edeb; --muted:#9aaaa4; --rule:#2c3633;
+    --source:#4bb3a7; --archive:#e0a040; --flag:#f08a5d; --wash:#222b28;
+    --brandmark:#e8edeb; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#121715; --card:#1a211f; --ink:#e8edeb; --muted:#9aaaa4; --rule:#2c3633;
+  --source:#4bb3a7; --archive:#e0a040; --flag:#f08a5d; --wash:#222b28;
+  --brandmark:#e8edeb; color-scheme:dark;
+}
+
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
+
+/* Zarovnání do bloku. Bez dělení slov dělá čeština v bloku řeky a díry mezi slovy,
+   proto hyphens:auto + lang="cs" na .wrap. Nadpisy, dlaždice a mono zůstávají vlevo. */
+.lede, section p, section li, .cap, .stg .d, figcaption, .foot{
+  text-align:justify;
+  text-justify:inter-word;
+  -webkit-hyphens:auto;hyphens:auto;
+}
+.mono, code, .cname, .issue, th, td{-webkit-hyphens:none;hyphens:none}
+h1,h2,h3,.tile .l,.legend,.u{text-align:left;-webkit-hyphens:none;hyphens:none}
+.wrap{max-width:760px;margin:0 auto;padding-inline:20px;padding-block:0 56px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+p{margin:0}
+code,.mono{font-family:var(--mono);font-size:.88em}
+
+/* masthead */
+.mast{border-bottom:3px solid var(--ink);padding-block:28px 14px;display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.brand .logo{height:34px;width:auto;flex:none;color:var(--brandmark)}
+.brand .label{font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;padding-left:14px;border-left:1px solid var(--rule)}
+.issue{font-family:var(--mono);font-size:13px;color:var(--muted);text-align:right;line-height:1.6}
+.issue b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+@media(max-width:520px){.issue{text-align:left}}
+.hero{padding-block:30px 26px;border-bottom:1px solid var(--rule)}
+h1{font-size:clamp(34px,6vw,50px);line-height:1.08;margin-block:0 14px;font-weight:700}
+.lede{font-size:19px;color:var(--muted)}
+
+section{padding-block:30px;border-bottom:1px solid var(--rule)}
+h2{font-size:23px;font-weight:600;margin-bottom:6px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+section>p+p,section>p+ul,.stack>*+*{margin-top:12px}
+.stack{display:flex;flex-direction:column}
+ul{margin:0;padding-left:1.1em}
+li+li{margin-top:7px}
+strong{font-weight:700}
+
+/* flow */
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+.step{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--source);border-radius:3px;padding:14px;min-width:0}
+.step:last-child{border-top-color:var(--archive)}
+.step .n{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em}
+.step h3{font-size:15px;margin-block:4px 5px;font-weight:600}
+.step p{font-size:13.5px;color:var(--muted);line-height:1.5}
+@media(max-width:560px){.flow{grid-template-columns:1fr}}
+
+/* metric tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:18px}
+.tile{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:14px;min-width:0}
+.tile .v{font-family:var(--display);font-size:27px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .l{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+
+/* chart */
+.chart{margin-top:18px;background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:16px}
+.crow{display:grid;grid-template-columns:minmax(0,150px) 1fr;gap:12px;align-items:center}
+.crow+.crow{margin-top:11px}
+.cname{font-family:var(--mono);font-size:12px;color:var(--ink);overflow-wrap:anywhere}
+.cbar{display:flex;height:22px;border-radius:2px;overflow:hidden;background:var(--wash);min-width:0}
+.cseg{display:flex;align-items:center;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cgone{background:var(--archive);color:#fff;justify-content:flex-start;padding-left:6px}
+.cstay{background:var(--source);color:#fff;justify-content:flex-end;padding-right:6px}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:2px;flex:none}
+.cap{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.5}
+
+
+/* install ladder */
+.stages{margin-top:16px;border:1px solid var(--rule);border-radius:3px;background:var(--card);overflow:hidden}
+.stg{display:grid;grid-template-columns:minmax(0,104px) 1fr;gap:3px 14px;padding:11px 15px}
+.stg+.stg{border-top:1px solid var(--rule)}
+.stg .s{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--source)}
+.stg .d{font-size:14px;color:var(--muted);line-height:1.5}
+.stg.cut .s{color:var(--flag)}
+h3.sub{font-size:16px;font-weight:600;margin-top:24px;margin-bottom:6px}
+@media(max-width:520px){.stg{grid-template-columns:1fr}}
+
+/* download */
+.get{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:18px;margin-top:16px}
+.get .u{font-family:var(--mono);font-size:12.5px;word-break:break-all;background:var(--wash);padding:10px 12px;border-radius:2px;display:block;margin-top:8px;color:var(--ink)}
+.foot{padding-block:22px;font-size:13px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:14px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tscroll{overflow-x:auto}
+
+/* screenshots */
+figure{margin:18px 0 0}
+figure img{display:block;width:100%;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:3px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+figcaption b{color:var(--ink);font-weight:600}
+</style>
+
+<div class="wrap" lang="cs">
+
+  <div class="mast">
+    <div class="brand"><svg class="logo" role="img" aria-label="KODYS" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 123.36 52.624"><g transform="translate(0 -0.159)"><g transform="translate(-326 -434)"><g transform="translate(326 434.159)"><path d="M46.036-15.167a8.292,8.292,0,0,1-9.607-6.727A8.292,8.292,0,0,1,43.156-31.5a8.3,8.3,0,0,1,2.125-.09,9.978,9.978,0,0,0-4.879-.351A10.024,10.024,0,0,0,32.27-20.326a10.026,10.026,0,0,0,11.615,8.131,10.01,10.01,0,0,0,7.824-6.894,8.268,8.268,0,0,1-5.673,3.921" transform="translate(12.046 46.919)" fill="currentColor"/><path d="M19.7-8.184C24.986.413,37.662,7.13,51.594.935,41.975,11.22,21.3,13.764,11.459-.832S8.584-34.663,24.5-39.2C11.348-28.914,17.043-12.494,19.7-8.184" transform="translate(-1.01 43.24)" fill="currentColor"/><path d="M83.174-29.7h.4a.68.68,0,0,0,.4-.083.3.3,0,0,0,.1-.231.249.249,0,0,0-.044-.159.3.3,0,0,0-.143-.112,1.171,1.171,0,0,0-.336-.036h-.373Zm-.329,1.16V-30.6h.7a1.811,1.811,0,0,1,.522.052.529.529,0,0,1,.257.2.535.535,0,0,1,.1.3.536.536,0,0,1-.159.387.588.588,0,0,1-.427.187,1.069,1.069,0,0,1,.178.109,3.409,3.409,0,0,1,.3.405l.249.408h-.408l-.176-.328a1.577,1.577,0,0,0-.346-.48.459.459,0,0,0-.267-.07h-.194v.877Zm.835-2.649a1.66,1.66,0,0,0-.78.2,1.483,1.483,0,0,0-.6.594,1.56,1.56,0,0,0-.222.8,1.611,1.611,0,0,0,.213.791,1.536,1.536,0,0,0,.594.584,1.61,1.61,0,0,0,.791.213,1.6,1.6,0,0,0,.789-.213,1.544,1.544,0,0,0,.6-.584,1.7,1.7,0,0,0,.2-.791,1.613,1.613,0,0,0-.216-.8,1.47,1.47,0,0,0-.594-.594,1.688,1.688,0,0,0-.78-.2m0-.32a2.037,2.037,0,0,1,.94.249,1.742,1.742,0,0,1,.71.707,1.943,1.943,0,0,1,.257.956,1.928,1.928,0,0,1-.247.947,1.8,1.8,0,0,1-.709.7,1.936,1.936,0,0,1-.95.255,1.926,1.926,0,0,1-.949-.255,1.784,1.784,0,0,1-.709-.7,1.914,1.914,0,0,1-.249-.947,1.838,1.838,0,0,1,.258-.956,1.744,1.744,0,0,1,.707-.707,2.053,2.053,0,0,1,.941-.249" transform="translate(37.774 47.221)" fill="currentColor" fill-rule="evenodd"/><path d="M84.724-29.6a11.8,11.8,0,0,0-5.435-1.385,5.524,5.524,0,0,0-5.839,5.795,4.2,4.2,0,0,0,1.274,3.361,8.439,8.439,0,0,0,3.366,1.457c2.087.61,2.679,1.052,2.679,1.995,0,1-.85,1.681-2.163,1.681a5.945,5.945,0,0,1-3.955-1.773l-1.905,3.619a10.445,10.445,0,0,0,5.989,1.955,8.083,8.083,0,0,0,4.273-1.145c1.643-1.07,2.418-2.64,2.418-5.02,0-2.475-1.237-3.9-4.232-4.782a18.766,18.766,0,0,1-1.922-.609c-.777-.37-1.163-.812-1.163-1.35a1.72,1.72,0,0,1,1.9-1.477,4.541,4.541,0,0,1,2.939,1.166Z" transform="translate(33.097 47.495)" fill="currentColor" fill-rule="evenodd"/><path d="M65.82-21.745v8.268h4.141v-8.268l5.951-8.971H70.9l-2.884,4.7-3.012-4.7H60.071Z" transform="translate(26.53 47.633)" fill="currentColor" fill-rule="evenodd"/><path d="M49.028-13.477h6.265c4.307,0,8.023-3.985,8.023-8.638,0-4.614-3.716-8.6-8.023-8.6H49.028Zm4.232-3.8v-9.637h.978a4.158,4.158,0,0,1,3.476,1.441,5.146,5.146,0,0,1,1.164,3.36,5.123,5.123,0,0,1-1.164,3.378,4.114,4.114,0,0,1-3.476,1.459Z" transform="translate(20.808 47.634)" fill="currentColor" fill-rule="evenodd"/><path d="M24.475-23.61v-7.106H20.206v17.24h4.269v-7.475L30-13.476h5.544l-7.117-9.081,6.508-8.158H29.67Z" transform="translate(5.875 47.633)" fill="currentColor" fill-rule="evenodd"/><path d="M71.936-38.864c-2.131-3.311-7.572-3.891-15.737-1.673-7.616,2.065-16.724,6.361-25.641,12.095A117.952,117.952,0,0,0,18.21-19.353c.006.131.012.26.021.39a74.486,74.486,0,0,1,9.285-6.979C46.373-38.07,66.195-41.662,69.067-37.2a6.49,6.49,0,0,1,.358,4.19c-1.681,6.718-8.756,16.147-22.75,25.145C26.562,5.072,9.305,6.54,7.282,3.394,5.81,1.105,6.21-3.361,9.486-8.8c-.118-.557-.216-1.107-.3-1.664-.093.109-.184.22-.275.329-5.4,6.51-7.134,11.7-5,15.011s7.571,3.894,15.737,1.679C27.266,4.491,36.373.2,45.288-5.538,60-15,70.976-26.365,72.6-33.819a6.51,6.51,0,0,0-.659-5.045" transform="translate(-3.026 41.86)" fill="#ffbe31"/></g></g></g></svg><span class="label">Interní sdělení</span></div>
+    <div class="issue"><b>08.10.2026</b></div>
+  </div>
+
+  <div class="hero">
+    <h1>k.Archive Manager 2.0</h1>
+    <p class="lede">Univerzální auditovaná archivace dle procesů. Implementována řada bezpečnostních mechanismů. Testováno na procesech WMS Edge a WMS Advantage.</p>
+  </div>
+
+  <section>
+    <span class="eyebrow">K čemu to je</span>
+    <h2>WMS databáze roste navždy</h2>
+    <div class="stack">
+      <p>Objednávka z roku 2019 se nikdy nesmaže, protože si na to nikdo netroufne. Zálohy se prodlužují, reindexace trvá déle, disk roste. Mazací skript problém řeší jen zdánlivě — co smaže, je pryč.</p>
+      <p>k.Archive Manager řádek nemaže, <strong>stěhuje ho</strong>. Archiv je systém záznamu: zůstává dotazovatelný, zálohovaný a obnovitelný. Zdrojová tabulka se tím zmenší, historie se neztratí.</p>
+    </div>
+    <div class="flow">
+      <div class="step">
+        <div class="n">01</div>
+        <h3>PREP — výběr</h3>
+        <p>Běží jednou denně <strong>těsně po pracovní době</strong>. Projde zdroj podle konfigurace a uloží si klíče dokumentů, které pravidlům vyhovují. Čistě čtení; nemaže nic.</p>
+      </div>
+      <div class="step">
+        <div class="n">02</div>
+        <h3>RUN — přesun</h3>
+        <p>Jedním příkazem zapíše řádek do archivu a smaže ho ze zdroje. Běží <strong>jen po striktně vyhrazenou dobu</strong> ve svém okně — ve výchozím profilu 55 minut. Co nestihne, <strong>přenese se do dalšího spuštění</strong>.</p>
+      </div>
+      <div class="step">
+        <div class="n">03</div>
+        <h3>Archiv</h3>
+        <p>Vlastní databáze se stejnou strukturou tabulek, s vlastním zálohováním a možností obnovy dokumentu zpět.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Jak vybírá</span>
+    <h2>Jednotkou je dokument, ne tabulka</h2>
+    <div class="stack">
+      <p>Nearchivuje se „tabulka objednávek“. Archivuje se <strong>objednávka</strong> — hlavička a všechny její řádky, komentáře, obaly a stavy. Buď odejde celý dokument, nebo nic. V nasazení pro Warehouse Advantage je takto popsáno <strong>šest dokumentových sad nad 23 tabulkami</strong>.</p>
+      <p>Dvě strategie podle tvaru dat. U <strong>ANCHOR</strong> se hlavička maže jako poslední, až po všech dětech — proto je přerušení bezpečné: nejhorší možný stav je dokument, jehož děti už jsou v archivu a hlavička ještě ve zdroji. Doběhne se a je hotovo. U <strong>TIMESTAMP</strong> jde první řídící tabulka a ostatní ji následují; tak se archivuje fronta práce, která hlavičku nemá.</p>
+      <p>Co dokument zadrží, je <strong>brána</strong>: objednávka musí být odeslaná, pick musí být <code>SHIPPED</code>, nákupka uzavřená. K tomu retence — jak daleko zpět musí být dokument okamžitě po ruce. To je jediné skutečné rozhodnutí, které od zákazníka potřebujeme.</p>
+    </div>
+
+
+    <h3 class="sub">Jak to vypadá na WMS Advantage</h3>
+    <p>Šest sad popsaných pro Warehouse Advantage vypadá v konfiguraci takto — a je to celý obsah toho, co se pro zákazníka nastavuje:</p>
+    <div class="tscroll">
+      <table>
+        <thead>
+          <tr><th>Sada</th><th>Strategie</th><th>Kotva / řídící tabulka</th><th>Klíč dokumentu</th><th class="num">Tabulek</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">AAD_ORDER_ARCH</td><td>ANCHOR</td><td class="mono">t_order</td><td class="mono">ORDER_NUMBER</td><td class="num">8</td></tr>
+          <tr><td class="mono">AAD_PO_ARCH</td><td>ANCHOR</td><td class="mono">t_po_master</td><td class="mono">PO_NUMBER</td><td class="num">5</td></tr>
+          <tr><td class="mono">AAD_PICKDETAIL_ARCH</td><td>ANCHOR</td><td class="mono">t_pick_detail</td><td class="mono">PICK_ID</td><td class="num">3</td></tr>
+          <tr><td class="mono">AAD_TRANLOG_ARCH</td><td>ANCHOR</td><td class="mono">t_tran_log</td><td class="mono">TRAN_LOG_ID</td><td class="num">3</td></tr>
+          <tr><td class="mono">AAD_WORKQ_ARCH</td><td>TIMESTAMP</td><td class="mono">t_work_q</td><td class="mono">WORK_Q_ID</td><td class="num">4</td></tr>
+          <tr><td class="mono">ADV_LOGMSG_ARCH</td><td>ANCHOR</td><td class="mono">t_log_message</td><td class="mono">LOG_ROW</td><td class="num">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cap">Objednávka je největší dokument — osm tabulek, ze kterých odejdou buď všechny řádky, nebo žádný. Fronta práce hlavičku nemá, a jede proto přes <strong>TIMESTAMP</strong> s řídící tabulkou <span class="mono">t_work_q</span>. Součet ve sloupci dává 24, zatímco tabulek je 23: <span class="mono">t_work_q_dependency</span> patří do dvou sad najednou, což konfigurace dovoluje. Pět sad čte databázi <span class="mono">AAD</span>, šestá <span class="mono">ADV</span> — jedna konfigurace tedy obsluhuje dvě zdrojové databáze zároveň. Retence je 90 dní, u aplikačního logu v <span class="mono">ADV</span> kratší.</p>
+    <h3 class="sub">Jak to vypadá na WMS Edge</h3>
+    <p>Edge má úplně jiné schéma než Warehouse Advantage — jiné názvy tabulek, jiný tvar dokladů. Konfigurační model je ale stejný, takže se nic neprogramuje, jen popisuje. Pro Edge (a shodně pro KMWEBV) je v balíčku odzkoušeno <strong>pět procesů</strong>:</p>
+    <div class="tscroll">
+      <table>
+        <thead>
+          <tr><th>Proces</th><th>Strategie</th><th>Kotva / řídící tabulka</th><th>Klíč dokumentu</th><th class="num">Tabulek</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">RECEIVING</td><td>ANCHOR</td><td class="mono">BACKRH</td><td class="mono">PO_NUM</td><td class="num">2</td></tr>
+          <tr><td class="mono">SHIPPING</td><td>ANCHOR</td><td class="mono">SHIPHIST</td><td class="mono">PACKSLIP</td><td class="num">6</td></tr>
+          <tr><td class="mono">RF_LOG2</td><td>TIMESTAMP</td><td class="mono">RF_LOG2</td><td class="mono">ROWID</td><td class="num">1</td></tr>
+          <tr><td class="mono">INTEGRACE_DNLOAD</td><td>TIMESTAMP</td><td class="mono">DNLOAD_ARCHIVE</td><td class="mono">ROWID</td><td class="num">1</td></tr>
+          <tr><td class="mono">INTEGRACE_UPLOAD</td><td>TIMESTAMP</td><td class="mono">UPLOADARCHIVE</td><td class="mono">ROWID</td><td class="num">1</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cap">Příjem a expedice mají hlavičku, a jdou proto přes <strong>ANCHOR</strong>: dokumentem je příjemka pod <span class="mono">PO_NUM</span>, respektive dodací list pod <span class="mono">PACKSLIP</span>, a hlavička se maže až po všech detailech — u expedice se takto drží pohromadě šest tabulek. Systémový log a obě integrační fronty hlavičku nemají; dokumentem je tam samotný řádek pod <span class="mono">ROWID</span>, takže jedou přes <strong>TIMESTAMP</strong>. Retence je u všech pěti 540 dní.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">Měřeno, ne tvrzeno</span>
+    <h2>Co ukázaly testy</h2>
+    <div class="tiles">
+      <div class="tile"><div class="v">2 986 057</div><div class="l">řádků archivováno — a přesně tolik smazáno. Divergence nula.</div></div>
+      <div class="tile"><div class="v">475 566</div><div class="l">zdrojových řádků za 60 s v jedné sadě, každý předtím zapsaný do archivu</div></div>
+      <div class="tile"><div class="v">23 / 23</div><div class="l">tabulek archivu sedělo s předpovědí na řádek přesně</div></div>
+      <div class="tile"><div class="v">0</div><div class="l">blockerů v go-live kontrole nasazeného prostředí</div></div>
+    </div>
+    <p class="cap">Měřeno na SQL Serveru 2022, collation <span class="mono">Czech_CS_AS</span>, nad databázemi AAD (394 tabulek) a ADV (47 tabulek), na reálných zákaznických datech i na objemovém testu. Září 2026.</p>
+
+    <figure>
+      <img src="data:image/png;base64,PLACEHOLDER_RFL" alt="Obrazovka Analysis &amp; Estimates v Admin Console: dlaždice s počty mapovaných tabulek, zdrojových a archivovaných řádků a běhů, pod nimi grafy Source vs Archived by table a Difference by table.">
+      <figcaption><b>Analysis &amp; Estimates.</b> Odhad objemu příští dávky v MB, vedle toho porovnání zdroje a archivu po tabulkách. Tyrkysová je zdroj, oranžová archiv. Záporný rozdíl u aplikačního logu ADV je normální stav — zdroj se pod archivem vyprazdňuje vlastním úklidem WMS.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <span class="eyebrow">Selektivita</span>
+    <h2>Odejde jen to, co splní pravidlo</h2>
+    <p>Nejpřesvědčivější číslo není kolik se smazalo, ale kolik <strong>zůstalo</strong>. Jeden běh nad reálnými daty zákazníka:</p>
+
+    <div class="chart">
+      <div class="crow">
+        <div class="cname">t_tran_log</div>
+        <div class="cbar"><div class="cseg cgone" style="width:100%">9 008</div></div>
+      </div>
+      <div class="crow">
+        <div class="cname">t_work_q</div>
+        <div class="cbar"><div class="cseg cgone" style="width:97.1%">2 733</div><div class="cseg cstay" style="width:2.9%"></div></div>
+      </div>
+      <div class="crow">
+        <div class="cname">t_po_master</div>
+        <div class="cbar"><div class="cseg cgone" style="width:52.8%">124</div><div class="cseg cstay" style="width:47.2%">111</div></div>
+      </div>
+      <div class="crow">
+        <div class="cname">t_order</div>
+        <div class="cbar"><div class="cseg cgone" style="width:39.6%">334</div><div class="cseg cstay" style="width:60.4%">509</div></div>
+      </div>
+      <div class="crow">
+        <div class="cname">t_pick_detail</div>
+        <div class="cbar"><div class="cseg cgone" style="width:4.7%"></div><div class="cseg cstay" style="width:95.3%">1 132</div></div>
+      </div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--archive)"></i> odešlo do archivu</span>
+        <span><i class="dot" style="background:var(--source)"></i> zůstalo ve zdroji — brána nebo retence</span>
+      </div>
+      <p class="cap">Podíl na celkovém počtu řádků v tabulce. <span class="mono">t_pick_detail</span> drží 1 132 z 1 188 řádků, protože jen 56 picků je ve stavu <span class="mono">SHIPPED</span> a zároveň za hranicí retence.</p>
+    </div>
+
+    <p style="margin-top:14px">Při objemovém testu zůstalo ve zdrojové tabulce picků <strong>přesně 15 000 ze 75 000</strong> řádků — tedy přesně tolik, kolik jich bránou neprošlo.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">Proč tomu jde věřit na produkci</span>
+    <h2>Bezpečnostní mechanismy</h2>
+    <ul>
+      <li><strong>Archivace a mazání jsou jeden příkaz.</strong> Řádek se maže příkazem, jehož výstup zapisuje mazané řádky rovnou do archivu. Stav „smazáno, nezazálohováno“ nemůže vzniknout — ne proto, že se hlídá, ale protože to jinak neumí.</li>
+      <li><strong>Kontrola divergence.</strong> Každý běh počítá zvlášť archivované a smazané řádky; rozdíl musí být nula.</li>
+      <li><strong>Do WMS databáze se nesahá.</strong> Jen <code>SELECT</code> a <code>DELETE</code> na pojmenovaných tabulkách. Žádný index, sloupec ani trigger. Požadavky na indexy nástroj vypíše i s hotovým DDL, ale <strong>nevytvoří je</strong> — to je rozhodnutí DBA zákazníka.</li>
+      <li><strong>Běhový účet nesmí být sysadmin.</strong> Má jen čtení a mazání na mapovaných tabulkách. Job se odmítne spustit, pokud ho vlastní sysadmin.</li>
+      <li><strong>Konfigurace nesmí obsahovat kód.</strong> Spojovací podmínky a výrazy procházejí kontrolou, která odmítne poddotaz, příkaz i volání procedury. Cutoff musí mít časovou zónu, jinak neprojde.</li>
+      <li><strong>Omezený dopad.</strong> Nejvýš 4 000 řádků na transakci (nad tím SQL Server eskaluje zámek na celou tabulku), běhové okno, aplikační zámek proti souběhu, prodleva mezi dávkami. Nástroj je navržen jako přerušitelný, ne jako rychlý.</li>
+      <li><strong>Přerušení je normální stav.</strong> Rozpracovaná dávka se uloží i s nezpracovanými klíči a příště pokračuje. Běh se označí jako <em>neúspěšný</em> — nikdy se neodvozuje, že dopadl dobře, ani když počty sedí.</li>
+      <li><strong>Veškerá manipulace s daty je auditovaná.</strong> Vždy a u všech procesů se eviduje každý běh s počty dávek, dokumentů a řádků, každá změna konfigurace s tím, kdo ji provedl, kdy a proč, i každé přihlášení do konzole. Nad rámec toho lze u každého procesu zapnout <strong>stopu na jednotlivý dokument</strong>: co odešlo, pod jakým klíčem, kdy vzniklo, kdy bylo smazáno a zda bylo předtím archivováno. Ta je na úrovni databáze <strong>chráněná proti úpravě i smazání</strong>, nejen aplikačně. U objemných logů se obvykle nechává vypnutá — dokumentem je tam jediný řádek, takže by stopa narostla stejně jako archiv. Je to vědomé rozhodnutí, ne tiché opomenutí: go-live kontrola sama vypíše, které procesy ji zapnutou nemají.</li>
+      <li><strong>Pojistky k zapnutí.</strong> Legal hold (dokument pod držením se nesmaže, i když držení přišlo až po přípravě dávky), režim pouze kopírovat, retenční podlaha a náhled nanečisto.</li>
+    </ul>
+
+    <figure>
+      <img src="data:image/png;base64,PLACEHOLDER_RUNS" alt="Obrazovka Runs v Admin Console: tabulka šesti běhů, všechny se stavem OK, se zdrojem, archivem, režimem, časy, počtem dávek, dokumentů a řádků.">
+      <figcaption><b>Runs.</b> Každý běh se stavem, trváním, počtem dávek, dokumentů a řádků. Šest sad odbavených za osmnáct sekund; sloupec Error je prázdný. Pod tabulkou se rozbaluje detail až na jednotlivé objekty a dokumenty.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <span class="eyebrow">V praxi</span>
+    <h2>Operátorovi stačí webová konzole</h2>
+    <div class="stack">
+      <p>Žádné SSMS, žádný přístup do databáze. Dashboard s objemy a provozními signály, historie běhů, vyhledání dokumentu, odhady, konfigurace, validace, go-live kontrola a legal holdy. Čtení je anonymní, <strong>editace vyžaduje přihlášení</strong> a zapisuje se do auditu.</p>
+      <p>Od zákazníka potřebujeme šest rozhodnutí, ne úkoly: retenci, vyhrazený účet pro běh, okno pro archivaci, umístění záloh archivní databáze, kdo vytvoří případné indexy a kdo bude operátor.</p>
+    </div>
+
+    <figure>
+      <img src="data:image/png;base64,PLACEHOLDER_DASH" alt="Dashboard Admin Console: dlaždice s počtem procesů, zdrojových a archivovaných řádků a neúspěšných běhů, pás provozních signálů a tři grafy.">
+      <figcaption><b>Dashboard.</b> Šest provozních signálů s vlastním stavovým štítkem — zdraví běhů, fronta příprav, pokrytí procesů, dostupnost objektů, validace konfigurace. Co potřebuje pozornost, je vidět bez čtení čísel.</figcaption>
+    </figure>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>Co</th><th>Kde</th></tr></thead>
+        <tbody>
+          <tr><td>Denní pohled, objemy, signály</td><td>Dashboard</td></tr>
+          <tr><td>Co kdy odešlo</td><td>Runs</td></tr>
+          <tr><td>„Kde je objednávka 12345?“</td><td>Document lookup</td></tr>
+          <tr><td>Kolik vezme příští běh, kolik místa</td><td>Analysis &amp; Estimates</td></tr>
+          <tr><td>Kontrola před změnou, návrhy indexů</td><td>Validation</td></tr>
+          <tr><td>Podmínky pro ostrý provoz</td><td>Go-live</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+
+  <section>
+    <span class="eyebrow">Jak se nasazuje</span>
+    <h2>Šest fází, jeden skript</h2>
+    <div class="stack">
+      <p>Instalace není instalátor, ale sekvence. Jediný ovladač <span class="mono">Run-Deploy.ps1</span> dostane server, zdrojovou databázi a název fáze — a spustí právě tu jednu. Každá fáze končí vlastním ověřením, takže je vidět, že se smí pokračovat.</p>
+    </div>
+    <div class="stages">
+      <div class="stg"><span class="s">precheck</span><span class="d">Jen čte. Ověří verzi a edici SQL Serveru, oprávnění a prostředí. Spustitelné kdekoli, nezaloží nic.</span></div>
+      <div class="stg"><span class="s">deploy</span><span class="d">Založí obě databáze — administrativní a archivní — a nahraje produkt. Končí vlastními samotesty.</span></div>
+      <div class="stg"><span class="s">configure</span><span class="d">Nahraje šest sad dokumentů, vygeneruje přehled chybějících indexů, založí role a zvaliduje konfiguraci proti skutečnému schématu WMS.</span></div>
+      <div class="stg"><span class="s">runtime</span><span class="d">Vypíše ruční kroky: servisní účet pro běh a pět jobů SQL Agenta. Ručně schválně — heslo do skriptu nepatří.</span></div>
+      <div class="stg"><span class="s">test</span><span class="d">Testovací data a běh nanečisto. Spočítá, co by odešlo, a nesmaže nic.</span></div>
+      <div class="stg cut"><span class="s">realrun</span><span class="d">První ostrý běh. Maže — a proto se nespustí bez výslovného potvrzení parametrem <span class="mono">-IConfirm</span>.</span></div>
+    </div>
+    <p class="cap">Hromadná fáze <strong><span class="mono">all</span> schválně končí před <span class="mono">realrun</span></strong>. Celé nasazení tak lze projet jedním příkazem až do hotového, otestovaného a stále nic nemazajícího stavu; první smazání je vždycky samostatné rozhodnutí člověka.</p>
+
+    <h3 class="sub">Konzole a joby</h3>
+    <p>Webová konzole je obyčejná IIS aplikace — na serveru stačí doinstalovat .NET 10 Hosting Bundle. Pravidelný provoz pak obstará pět jobů SQL Agenta: <span class="mono">PREP</span> připraví dávky, <span class="mono">RUN</span> je zpracuje ve svém okně, <span class="mono">RECOVER STALE RUNS</span> uklidí po neplánovaném pádu a dva zálohovací joby drží archivní databázi obnovitelnou.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">Kde ji vzít</span>
+    <h2>Repozitář</h2>
+    <div class="get">
+      <p>Kompletní balíček: produkt, webová konzole, konfigurace pro Warehouse Advantage, testovací seedy, ověřovací skripty, nasazovací postup a dokumentace.</p>
+      <span class="u">https://tfs.kodys.cz:8443/GitCollection/Kodys%20-%20K.Archive%20Manager%202.0%20(WA)/_git/kArchiveManager2_WA.git</span>
+      <p style="margin-top:12px;font-size:14px;color:var(--muted)">Začněte souborem <span class="mono">README.md</span> (proč konfigurace vypadá, jak vypadá) a <span class="mono">DEPLOYMENT.md</span> (nasazení po fázích, každá se zastavovací podmínkou).</p>
+    </div>
+  </section>
+
+  <div class="foot">
+    Dotazy a zkušenosti z nasazení posílejte WMS týmu. Čísla v tomto sdělení pocházejí z měření na referenční instanci v září 2026; na zákaznických datech se objemy liší, metodika ne.
+  </div>
+
+</div>

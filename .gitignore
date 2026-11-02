@@ -34,3 +34,9 @@ _work/*.RUN.sql
 *.user
 Thumbs.db
 desktop.ini
+
+# newsletter - generovane podoby (vyrabi Build-Web/Pdf/Eml.ps1 ze zdroju)
+/newsletter/newsletter_final.html
+/newsletter/print.html
+/newsletter/*.eml
+/newsletter/pickup/

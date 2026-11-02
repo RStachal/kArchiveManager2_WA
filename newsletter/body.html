@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="cs" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<!-- Rika klientum, ze je navrzeno pro svetly rezim a nema se invertovat v tmavem. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>k.Archive Manager 2.0</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+<![endif]-->
+<style>
+  /* Jen progresivní vylepšení. Outlook (Word engine) tenhle blok z velké části ignoruje,
+     proto je veškerý nosný styl inline u elementů. */
+  :root{color-scheme:light;supported-color-schemes:light}
+  body{margin:0;padding:0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
+  table{border-collapse:collapse}
+  img{-ms-interpolation-mode:bicubic}
+  a{color:#0f766e}
+  @media only screen and (max-width:620px){
+    .shell{width:100% !important}
+    .pad{padding-left:18px !important;padding-right:18px !important}
+    .col{display:block !important;width:100% !important;padding-right:0 !important;margin-bottom:8px !important}
+    .gap{display:none !important}
+    .scale{width:100% !important;height:auto !important}
+    .stk{display:block !important;width:100% !important;text-align:left !important;padding-left:0 !important}
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f0eeea">
+<div style="display:none;font-size:1px;color:#f0eeea;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">Univerzální auditovaná archivace dle procesů. Testováno na WMS Edge a WMS Advantage. Vydání 08.10.2026.</div>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f0eeea">
+<tr><td align="center" style="padding:24px 10px">
+
+<table role="presentation" class="shell" cellpadding="0" cellspacing="0" border="0" width="640" style="width:640px;max-width:640px;background-color:#fbfaf8;border:1px solid #dde3e0">
+
+  <!-- hlavička -->
+  <tr><td class="pad" style="padding:22px 28px 12px 28px;border-bottom:3px solid #1b2220">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td align="left" valign="middle" style="padding:0">
+          <img src="cid:kodyslogo@kam.kodys.cz" width="123" height="53" alt="KODYS" style="display:block;border:0;outline:none;text-decoration:none">
+        </td>
+        <td align="right" valign="middle" class="stk" style="padding:0;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#1b2220;font-weight:bold">
+          08.10.2026
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <!-- titul -->
+  <tr><td class="pad" style="padding:28px 28px 24px 28px;border-bottom:1px solid #dde3e0">
+    <h1 style="margin:0 0 12px 0;font-family:Georgia,'Times New Roman',serif;font-size:34px;line-height:1.1;color:#1b2220;font-weight:bold">k.Archive Manager 2.0</h1>
+    <p style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:17px;line-height:1.5;color:#5c6b66;text-align:justify">Univerzální auditovaná archivace dle procesů. Implementována řada bezpečnostních mechanismů. Testováno na procesech WMS Edge a WMS Advantage.</p>
+  </td></tr>
+
+  <!-- K čemu to je -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">K čemu to je</p>
+    <h2 style="margin:0 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">WMS databáze roste navždy</h2>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Objednávka z roku 2019 se nikdy nesmaže, protože si na to nikdo netroufne. Zálohy se prodlužují, reindexace trvá déle, disk roste. Mazací skript problém řeší jen zdánlivě &mdash; co smaže, je pryč.</p>
+    <p style="margin:0 0 18px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">k.Archive Manager řádek nemaže, <strong>stěhuje ho</strong>. Archiv je systém záznamu: zůstává dotazovatelný, zálohovaný a obnovitelný. Zdrojová tabulka se tím zmenší, historie se neztratí.</p>
+
+    <!-- Ramecek je primo na bunkach radku, ne na vnorene tabulce: bunky jednoho radku
+         si vyrovnají výšku samy, takže karty končí ve stejné linii i v Outlooku. -->
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed">
+      <tr>
+        <td class="col" valign="top" width="32%" style="background-color:#ffffff;border:1px solid #dde3e0;border-top:3px solid #0f766e;padding:12px">
+          <p style="margin:0 0 3px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;color:#5c6b66">01</p>
+          <p style="margin:0 0 5px 0;font-family:Georgia,'Times New Roman',serif;font-size:15px;color:#1b2220;font-weight:bold">PREP &mdash; výběr</p>
+          <p style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45;color:#5c6b66">Běží jednou denně <strong style="color:#1b2220">těsně po pracovní době</strong>. Projde zdroj podle konfigurace a uloží si klíče dokumentů, které pravidlům vyhovují. Čistě čtení; nemaže nic.</p>
+        </td>
+        <td class="gap" width="2%" style="font-size:1px;line-height:1px">&nbsp;</td>
+        <td class="col" valign="top" width="32%" style="background-color:#ffffff;border:1px solid #dde3e0;border-top:3px solid #0f766e;padding:12px">
+          <p style="margin:0 0 3px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;color:#5c6b66">02</p>
+          <p style="margin:0 0 5px 0;font-family:Georgia,'Times New Roman',serif;font-size:15px;color:#1b2220;font-weight:bold">RUN &mdash; přesun</p>
+          <p style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45;color:#5c6b66">Jedním příkazem zapíše řádek do archivu a smaže ho ze zdroje. Běží <strong style="color:#1b2220">jen po striktně vyhrazenou dobu</strong> ve svém okně &mdash; ve výchozím profilu 55 minut. Co nestihne, <strong style="color:#1b2220">přenese se do dalšího spuštění</strong>.</p>
+        </td>
+        <td class="gap" width="2%" style="font-size:1px;line-height:1px">&nbsp;</td>
+        <td class="col" valign="top" width="32%" style="background-color:#ffffff;border:1px solid #dde3e0;border-top:3px solid #c2700a;padding:12px">
+          <p style="margin:0 0 3px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;color:#5c6b66">03</p>
+          <p style="margin:0 0 5px 0;font-family:Georgia,'Times New Roman',serif;font-size:15px;color:#1b2220;font-weight:bold">Archiv</p>
+          <p style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13px;line-height:1.45;color:#5c6b66">Vlastní databáze se stejnou strukturou tabulek, s vlastním zálohováním a možností obnovy dokumentu zpět.</p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <!-- Jak vybírá -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Jak vybírá</p>
+    <h2 style="margin:0 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Jednotkou je dokument, ne tabulka</h2>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Nearchivuje se &bdquo;tabulka objednávek&ldquo;. Archivuje se <strong>objednávka</strong> &mdash; hlavička a všechny její řádky, komentáře, obaly a stavy. Buď odejde celý dokument, nebo nic. V nasazení pro Warehouse Advantage je takto popsáno <strong>šest dokumentových sad nad 23 tabulkami</strong>.</p>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify"><strong>Dvě strategie podle tvaru dat.</strong> U <strong>ANCHOR</strong> se hlavička maže jako poslední, až po všech dětech &mdash; proto je přerušení bezpečné: nejhorší možný stav je dokument, jehož děti už jsou v archivu a hlavička ještě ve zdroji. Doběhne se a je hotovo. U <strong>TIMESTAMP</strong> jde první řídící tabulka a ostatní ji následují; tak se archivuje fronta práce, která hlavičku nemá.</p>
+    <p style="margin:0 0 20px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Co dokument zadrží, je <strong>brána</strong>: objednávka musí být odeslaná, pick musí být <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">SHIPPED</span>, nákupka uzavřená. K tomu retence &mdash; jak daleko zpět musí být dokument okamžitě po ruce. To je jediné skutečné rozhodnutí, které od zákazníka potřebujeme.</p>
+
+    <h3 style="margin:0 0 6px 0;font-family:Georgia,'Times New Roman',serif;font-size:16px;color:#1b2220;font-weight:bold">Jak to vypadá na WMS Advantage</h3>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Šest sad popsaných pro Warehouse Advantage vypadá v konfiguraci takto &mdash; a je to celý obsah toho, co se pro zákazníka nastavuje:</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px">
+      <tr>
+        <th align="left" style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Sada</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Strategie</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Kotva</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Klíč</th>
+        <th align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Tab.</th>
+      </tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">AAD_ORDER_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_order</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">ORDER_NUMBER</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">8</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">AAD_PO_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_po_master</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">PO_NUMBER</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">5</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">AAD_PICKDETAIL_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_pick_detail</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">PICK_ID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">3</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">AAD_TRANLOG_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_tran_log</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">TRAN_LOG_ID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">3</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">AAD_WORKQ_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">TIMESTAMP</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_work_q</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">WORK_Q_ID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">4</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">ADV_LOGMSG_ARCH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">t_log_message</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">LOG_ROW</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">1</td></tr>
+    </table>
+    <p style="margin:10px 0 20px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66;text-align:justify">Objednávka je největší dokument &mdash; osm tabulek, ze kterých odejdou buď všechny řádky, nebo žádný. Fronta práce hlavičku nemá, a jede proto přes <strong>TIMESTAMP</strong> s řídící tabulkou <span style="font-family:Consolas,'Courier New',monospace">t_work_q</span>. Součet ve sloupci dává 24, zatímco tabulek je 23: <span style="font-family:Consolas,'Courier New',monospace">t_work_q_dependency</span> patří do dvou sad najednou, což konfigurace dovoluje. Pět sad čte databázi <span style="font-family:Consolas,'Courier New',monospace">AAD</span>, šestá <span style="font-family:Consolas,'Courier New',monospace">ADV</span> &mdash; jedna konfigurace tedy obsluhuje dvě zdrojové databáze zároveň. Retence je 90 dní, u aplikačního logu v <span style="font-family:Consolas,'Courier New',monospace">ADV</span> kratší.</p>
+
+    <h3 style="margin:0 0 6px 0;font-family:Georgia,'Times New Roman',serif;font-size:16px;color:#1b2220;font-weight:bold">Jak to vypadá na WMS Edge</h3>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Edge má úplně jiné schéma než Warehouse Advantage &mdash; jiné názvy tabulek, jiný tvar dokladů. Konfigurační model je ale stejný, takže se nic neprogramuje, jen popisuje. Pro Edge (a shodně pro KMWEBV) je v balíčku odzkoušeno <strong>pět procesů</strong>:</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px">
+      <tr>
+        <th align="left" style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Proces</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Strategie</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Kotva</th>
+        <th align="left" style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Klíč</th>
+        <th align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Tab.</th>
+      </tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">RECEIVING</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">BACKRH</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">PO_NUM</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">2</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">SHIPPING</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">ANCHOR</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">SHIPHIST</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">PACKSLIP</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">6</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">RF_LOG2</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">TIMESTAMP</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">RF_LOG2</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">ROWID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">1</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">INTEGRACE_DNLOAD</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">TIMESTAMP</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">DNLOAD_ARCHIVE</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">ROWID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">1</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">INTEGRACE_UPLOAD</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">TIMESTAMP</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">UPLOADARCHIVE</td><td style="padding:6px 8px;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;color:#1b2220">ROWID</td><td align="right" style="padding:6px 0 6px 8px;border-bottom:1px solid #dde3e0;color:#1b2220">1</td></tr>
+    </table>
+    <p style="margin:10px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66;text-align:justify">Příjem a expedice mají hlavičku, a jdou proto přes <strong>ANCHOR</strong>: dokumentem je příjemka pod <span style="font-family:Consolas,'Courier New',monospace">PO_NUM</span>, respektive dodací list pod <span style="font-family:Consolas,'Courier New',monospace">PACKSLIP</span>, a hlavička se maže až po všech detailech &mdash; u expedice se takto drží pohromadě šest tabulek. Systémový log a obě integrační fronty hlavičku nemají; dokumentem je tam samotný řádek pod <span style="font-family:Consolas,'Courier New',monospace">ROWID</span>, takže jedou přes <strong>TIMESTAMP</strong>. Retence je u všech pěti 540 dní.</p>
+  </td></tr>
+
+  <!-- Co ukázaly testy -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Měřeno, ne tvrzeno</p>
+    <h2 style="margin:0 0 14px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Co ukázaly testy</h2>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed">
+      <tr>
+        <td class="col" valign="top" width="49%" style="background-color:#ffffff;border:1px solid #dde3e0;padding:12px">
+          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.1;color:#1b2220;font-weight:bold">2 986 057</p>
+          <p style="margin:5px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;color:#5c6b66">řádků archivováno &mdash; a přesně tolik smazáno. Divergence nula.</p>
+        </td>
+        <td class="gap" width="2%" style="font-size:1px;line-height:1px">&nbsp;</td>
+        <td class="col" valign="top" width="49%" style="background-color:#ffffff;border:1px solid #dde3e0;padding:12px">
+          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.1;color:#1b2220;font-weight:bold">475 566</p>
+          <p style="margin:5px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;color:#5c6b66">zdrojových řádků za 60 s v jedné sadě, každý předtím zapsaný do archivu</p>
+        </td>
+      </tr>
+      <tr><td colspan="3" height="8" style="height:8px;font-size:1px;line-height:1px">&nbsp;</td></tr>
+      <tr>
+        <td class="col" valign="top" width="49%" style="background-color:#ffffff;border:1px solid #dde3e0;padding:12px">
+          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.1;color:#1b2220;font-weight:bold">23 / 23</p>
+          <p style="margin:5px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;color:#5c6b66">tabulek archivu sedělo s předpovědí na řádek přesně</p>
+        </td>
+        <td class="gap" width="2%" style="font-size:1px;line-height:1px">&nbsp;</td>
+        <td class="col" valign="top" width="49%" style="background-color:#ffffff;border:1px solid #dde3e0;padding:12px">
+          <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:25px;line-height:1.1;color:#1b2220;font-weight:bold">0</p>
+          <p style="margin:5px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4;color:#5c6b66">blockerů v go-live kontrole nasazeného prostředí</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:12px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66;text-align:justify">Měřeno na SQL Serveru 2022, collation <span style="font-family:Consolas,'Courier New',monospace">Czech_CS_AS</span>, nad databázemi AAD (394 tabulek) a ADV (47 tabulek), na reálných zákaznických datech i na objemovém testu. Září 2026.</p>
+
+    <img src="cid:shotrfl@kam.kodys.cz" width="584" alt="Analysis &amp; Estimates v Admin Console" class="scale" style="display:block;border:1px solid #dde3e0;outline:none;text-decoration:none;width:584px;max-width:100%;height:auto;margin-top:18px">
+    <p style="margin:8px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66"><strong style="color:#1b2220">Analysis &amp; Estimates.</strong> Odhad objemu příští dávky v MB, vedle toho porovnání zdroje a archivu po tabulkách. Tyrkysová je zdroj, oranžová archiv. Záporný rozdíl u aplikačního logu ADV je normální stav &mdash; zdroj se pod archivem vyprazdňuje vlastním úklidem WMS.</p>
+  </td></tr>
+
+  <!-- Selektivita -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Selektivita</p>
+    <h2 style="margin:0 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Odejde jen to, co splní pravidlo</h2>
+    <p style="margin:0 0 16px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Nejpřesvědčivější číslo není kolik se smazalo, ale <strong>kolik zůstalo</strong>. Jeden běh nad reálnými daty zákazníka:</p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff;border:1px solid #dde3e0"><tr><td style="padding:14px">
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr>
+          <td width="130" valign="middle" style="padding:0 10px 8px 0;font-family:Consolas,'Courier New',monospace;font-size:12px;color:#1b2220">t_tran_log</td>
+          <td valign="middle" style="padding:0 0 8px 0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed"><tr>
+              <td width="100%" bgcolor="#c2700a" height="21" style="background-color:#c2700a;height:21px;padding:0 0 0 6px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">9 008</td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td width="130" valign="middle" style="padding:0 10px 8px 0;font-family:Consolas,'Courier New',monospace;font-size:12px;color:#1b2220">t_work_q</td>
+          <td valign="middle" style="padding:0 0 8px 0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed"><tr>
+              <td width="97%" bgcolor="#c2700a" height="21" style="background-color:#c2700a;height:21px;padding:0 0 0 6px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">2 733</td>
+              <td width="3%" bgcolor="#0f766e" height="21" style="background-color:#0f766e;height:21px">&nbsp;</td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td width="130" valign="middle" style="padding:0 10px 8px 0;font-family:Consolas,'Courier New',monospace;font-size:12px;color:#1b2220">t_po_master</td>
+          <td valign="middle" style="padding:0 0 8px 0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed"><tr>
+              <td width="53%" bgcolor="#c2700a" height="21" style="background-color:#c2700a;height:21px;padding:0 0 0 6px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">124</td>
+              <td width="47%" bgcolor="#0f766e" height="21" align="right" style="background-color:#0f766e;height:21px;padding:0 6px 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">111</td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td width="130" valign="middle" style="padding:0 10px 8px 0;font-family:Consolas,'Courier New',monospace;font-size:12px;color:#1b2220">t_order</td>
+          <td valign="middle" style="padding:0 0 8px 0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed"><tr>
+              <td width="40%" bgcolor="#c2700a" height="21" style="background-color:#c2700a;height:21px;padding:0 0 0 6px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">334</td>
+              <td width="60%" bgcolor="#0f766e" height="21" align="right" style="background-color:#0f766e;height:21px;padding:0 6px 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">509</td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td width="130" valign="middle" style="padding:0 10px 0 0;font-family:Consolas,'Courier New',monospace;font-size:12px;color:#1b2220">t_pick_detail</td>
+          <td valign="middle" style="padding:0">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="table-layout:fixed"><tr>
+              <td width="5%" bgcolor="#c2700a" height="21" style="background-color:#c2700a;height:21px">&nbsp;</td>
+              <td width="95%" bgcolor="#0f766e" height="21" align="right" style="background-color:#0f766e;height:21px;padding:0 6px 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;color:#ffffff">1 132</td>
+            </tr></table>
+          </td>
+        </tr>
+      </table>
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:12px;border-top:1px solid #dde3e0">
+        <tr><td style="padding:10px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;color:#5c6b66">
+          <span style="display:inline-block;width:10px;height:10px;background-color:#c2700a">&nbsp;</span>&nbsp;odešlo do archivu &nbsp;&nbsp;
+          <span style="display:inline-block;width:10px;height:10px;background-color:#0f766e">&nbsp;</span>&nbsp;zůstalo ve zdroji &mdash; brána nebo retence
+        </td></tr>
+      </table>
+
+      <p style="margin:10px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66;text-align:justify">Podíl na celkovém počtu řádků v tabulce. <span style="font-family:Consolas,'Courier New',monospace">t_pick_detail</span> drží 1 132 z 1 188 řádků, protože jen 56 picků je ve stavu <span style="font-family:Consolas,'Courier New',monospace">SHIPPED</span> a zároveň za hranicí retence.</p>
+    </td></tr></table>
+
+    <p style="margin:14px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Při objemovém testu zůstalo ve zdrojové tabulce picků <strong>přesně 15 000 ze 75 000</strong> řádků &mdash; tedy přesně tolik, kolik jich bránou neprošlo.</p>
+  </td></tr>
+
+  <!-- Bezpečnostní mechanismy -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Proč tomu jde věřit na produkci</p>
+    <h2 style="margin:0 0 12px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Bezpečnostní mechanismy</h2>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:14.5px;line-height:1.55;color:#1b2220">
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Archivace a mazání jsou jeden příkaz.</strong> Řádek se maže příkazem, jehož výstup zapisuje mazané řádky rovnou do archivu. Stav &bdquo;smazáno, nezazálohováno&ldquo; nemůže vzniknout &mdash; ne proto, že se hlídá, ale protože to jinak neumí.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Kontrola divergence.</strong> Každý běh počítá zvlášť archivované a smazané řádky; rozdíl musí být nula.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Do WMS databáze se nesahá.</strong> Jen <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">SELECT</span> a <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">DELETE</span> na pojmenovaných tabulkách. Žádný index, sloupec ani trigger. Požadavky na indexy nástroj vypíše i s hotovým DDL, ale <strong>nevytvoří je</strong> &mdash; to je rozhodnutí DBA zákazníka.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Běhový účet nesmí být sysadmin.</strong> Má jen čtení a mazání na mapovaných tabulkách. Job se odmítne spustit, pokud ho vlastní sysadmin.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Konfigurace nesmí obsahovat kód.</strong> Spojovací podmínky a výrazy procházejí kontrolou, která odmítne poddotaz, příkaz i volání procedury. Cutoff musí mít časovou zónu, jinak neprojde.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Omezený dopad.</strong> Nejvýš 4 000 řádků na transakci (nad tím SQL Server eskaluje zámek na celou tabulku), běhové okno, aplikační zámek proti souběhu, prodleva mezi dávkami. Nástroj je navržen jako přerušitelný, ne jako rychlý.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Přerušení je normální stav.</strong> Rozpracovaná dávka se uloží i s nezpracovanými klíči a příště pokračuje. Běh se označí jako <em>neúspěšný</em> &mdash; nikdy se neodvozuje, že dopadl dobře, ani když počty sedí.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 9px 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0 0 9px 0;text-align:justify"><strong>Veškerá manipulace s daty je auditovaná.</strong> Vždy a u všech procesů se eviduje každý běh s počty dávek, dokumentů a řádků, každá změna konfigurace s tím, kdo ji provedl, kdy a proč, i každé přihlášení do konzole. Nad rámec toho lze u každého procesu zapnout <strong>stopu na jednotlivý dokument</strong>: co odešlo, pod jakým klíčem, kdy vzniklo, kdy bylo smazáno a zda bylo předtím archivováno. Ta je na úrovni databáze <strong>chráněná proti úpravě i smazání</strong>, nejen aplikačně. U objemných logů se obvykle nechává vypnutá &mdash; dokumentem je tam jediný řádek, takže by stopa narostla stejně jako archiv. Je to vědomé rozhodnutí, ne tiché opomenutí: go-live kontrola sama vypíše, které procesy ji zapnutou nemají.</td></tr>
+      <tr><td valign="top" width="14" style="padding:0 8px 0 0;color:#c2700a;font-weight:bold">&bull;</td><td style="padding:0;text-align:justify"><strong>Pojistky k zapnutí.</strong> Legal hold (dokument pod držením se nesmaže, i když držení přišlo až po přípravě dávky), režim pouze kopírovat, retenční podlaha a náhled nanečisto.</td></tr>
+    </table>
+
+    <img src="cid:shotruns@kam.kodys.cz" width="584" alt="Obrazovka Runs v Admin Console" class="scale" style="display:block;border:1px solid #dde3e0;outline:none;text-decoration:none;width:584px;max-width:100%;height:auto;margin-top:18px">
+    <p style="margin:8px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66"><strong style="color:#1b2220">Runs.</strong> Každý běh se stavem, trváním, počtem dávek, dokumentů a řádků. Šest sad odbavených za osmnáct sekund; sloupec Error je prázdný. Pod tabulkou se rozbaluje detail až na jednotlivé objekty a dokumenty.</p>
+  </td></tr>
+
+  <!-- V praxi -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">V praxi</p>
+    <h2 style="margin:0 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Operátorovi stačí webová konzole</h2>
+    <p style="margin:0 0 12px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Žádné SSMS, žádný přístup do databáze. Dashboard s objemy a provozními signály, historie běhů, vyhledání dokumentu, odhady, konfigurace, validace, go-live kontrola a legal holdy. Čtení je anonymní, <strong>editace vyžaduje přihlášení</strong> a zapisuje se do auditu.</p>
+    <p style="margin:0 0 16px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Od zákazníka potřebujeme šest rozhodnutí, ne úkoly: retenci, vyhrazený účet pro běh, okno pro archivaci, umístění záloh archivní databáze, kdo vytvoří případné indexy a kdo bude operátor.</p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13.5px">
+      <tr>
+        <th align="left" style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Co</th>
+        <th align="left" style="padding:6px 0;border-bottom:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#5c6b66;font-weight:bold">Kde</th>
+      </tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">Denní pohled, objemy, signály</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Dashboard</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">Co kdy odešlo</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Runs</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">&bdquo;Kde je objednávka 12345?&ldquo;</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Document lookup</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">Kolik vezme příští běh, kolik místa</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Analysis &amp; Estimates</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">Kontrola před změnou, návrhy indexů</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Validation</td></tr>
+      <tr><td style="padding:6px 8px 6px 0;border-bottom:1px solid #dde3e0;color:#1b2220">Podmínky pro ostrý provoz</td><td style="padding:6px 0;border-bottom:1px solid #dde3e0;color:#1b2220;font-weight:bold">Go-live</td></tr>
+    </table>
+
+    <img src="cid:shotdash@kam.kodys.cz" width="584" alt="Dashboard Admin Console" class="scale" style="display:block;border:1px solid #dde3e0;outline:none;text-decoration:none;width:584px;max-width:100%;height:auto;margin-top:18px">
+    <p style="margin:8px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66"><strong style="color:#1b2220">Dashboard.</strong> Šest provozních signálů s vlastním stavovým štítkem &mdash; zdraví běhů, fronta příprav, pokrytí procesů, dostupnost objektů, validace konfigurace. Co potřebuje pozornost, je vidět bez čtení čísel.</p>
+  </td></tr>
+
+  <!-- Nasazení -->
+  <tr><td class="pad" style="padding:26px 28px;border-bottom:1px solid #dde3e0">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Jak se nasazuje</p>
+    <h2 style="margin:0 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Šest fází, jeden skript</h2>
+    <p style="margin:0 0 14px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Instalace není instalátor, ale sekvence. Jediný ovladač <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">Run-Deploy.ps1</span> dostane server, zdrojovou databázi a název fáze &mdash; a spustí právě tu jednu. Každá fáze končí vlastním ověřením, takže je vidět, že se smí pokračovat.</p>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff;border:1px solid #dde3e0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13.5px;line-height:1.5">
+      <tr><td valign="top" width="95" style="padding:10px 12px;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#0f766e">precheck</td><td style="padding:10px 12px 10px 0;color:#5c6b66">Jen čte. Ověří verzi a edici SQL Serveru, oprávnění a prostředí. Spustitelné kdekoli, nezaloží nic.</td></tr>
+      <tr><td valign="top" width="95" style="padding:10px 12px;border-top:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#0f766e">deploy</td><td style="padding:10px 12px 10px 0;border-top:1px solid #dde3e0;color:#5c6b66">Založí obě databáze &mdash; administrativní a archivní &mdash; a nahraje produkt. Končí vlastními samotesty.</td></tr>
+      <tr><td valign="top" width="95" style="padding:10px 12px;border-top:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#0f766e">configure</td><td style="padding:10px 12px 10px 0;border-top:1px solid #dde3e0;color:#5c6b66">Nahraje šest sad dokumentů, vygeneruje přehled chybějících indexů, založí role a zvaliduje konfiguraci proti skutečnému schématu WMS.</td></tr>
+      <tr><td valign="top" width="95" style="padding:10px 12px;border-top:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#0f766e">runtime</td><td style="padding:10px 12px 10px 0;border-top:1px solid #dde3e0;color:#5c6b66">Vypíše ruční kroky: servisní účet pro běh a pět jobů SQL Agenta. Ručně schválně &mdash; heslo do skriptu nepatří.</td></tr>
+      <tr><td valign="top" width="95" style="padding:10px 12px;border-top:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#0f766e">test</td><td style="padding:10px 12px 10px 0;border-top:1px solid #dde3e0;color:#5c6b66">Testovací data a běh nanečisto. Spočítá, co by odešlo, a nesmaže nic.</td></tr>
+      <tr><td valign="top" width="95" style="padding:10px 12px;border-top:1px solid #dde3e0;font-family:Consolas,'Courier New',monospace;font-size:12.5px;font-weight:bold;color:#9a3412">realrun</td><td style="padding:10px 12px 10px 0;border-top:1px solid #dde3e0;color:#5c6b66">První ostrý běh. Maže &mdash; a proto se nespustí bez výslovného potvrzení parametrem <span style="font-family:Consolas,'Courier New',monospace">-IConfirm</span>.</td></tr>
+    </table>
+
+    <p style="margin:10px 0 18px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12.5px;line-height:1.5;color:#5c6b66;text-align:justify">Hromadná fáze <strong style="color:#1b2220"><span style="font-family:Consolas,'Courier New',monospace">all</span> schválně končí před <span style="font-family:Consolas,'Courier New',monospace">realrun</span></strong>. Celé nasazení tak lze projet jedním příkazem až do hotového, otestovaného a stále nic nemazajícího stavu; první smazání je vždycky samostatné rozhodnutí člověka.</p>
+
+    <h3 style="margin:0 0 6px 0;font-family:Georgia,'Times New Roman',serif;font-size:16px;color:#1b2220;font-weight:bold">Konzole a joby</h3>
+    <p style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Webová konzole je obyčejná IIS aplikace &mdash; na serveru stačí doinstalovat .NET 10 Hosting Bundle. Pravidelný provoz pak obstará pět jobů SQL Agenta: <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">PREP</span> připraví dávky, <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">RUN</span> je zpracuje ve svém okně, <span style="font-family:Consolas,'Courier New',monospace;font-size:13px">RECOVER STALE RUNS</span> uklidí po neplánovaném pádu a dva zálohovací joby drží archivní databázi obnovitelnou.</p>
+  </td></tr>
+
+  <!-- Repozitář -->
+  <tr><td class="pad" style="padding:26px 28px">
+    <p style="margin:0 0 4px 0;font-family:Consolas,'Courier New',monospace;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#5c6b66">Kde ji vzít</p>
+    <h2 style="margin:0 0 12px 0;font-family:Georgia,'Times New Roman',serif;font-size:21px;line-height:1.25;color:#1b2220;font-weight:bold">Repozitář</h2>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff;border:1px solid #dde3e0"><tr><td style="padding:16px">
+      <p style="margin:0 0 10px 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1b2220;text-align:justify">Kompletní balíček: produkt, webová konzole, konfigurace pro Warehouse Advantage, testovací seedy, ověřovací skripty, nasazovací postup a dokumentace.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#eef2f1"><tr><td style="padding:10px 12px;font-family:Consolas,'Courier New',monospace;font-size:11.5px;line-height:1.5;word-break:break-all">
+        <a href="https://tfs.kodys.cz:8443/GitCollection/Kodys%20-%20K.Archive%20Manager%202.0%20(WA)/_git/kArchiveManager2_WA.git" style="color:#0f766e;text-decoration:none">https://tfs.kodys.cz:8443/GitCollection/Kodys%20-%20K.Archive%20Manager%202.0%20(WA)/_git/kArchiveManager2_WA.git</a>
+      </td></tr></table>
+      <p style="margin:10px 0 0 0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#5c6b66">Začněte souborem <span style="font-family:Consolas,'Courier New',monospace">README.md</span> (proč konfigurace vypadá, jak vypadá) a <span style="font-family:Consolas,'Courier New',monospace">DEPLOYMENT.md</span> (nasazení po fázích, každá se zastavovací podmínkou).</p>
+    </td></tr></table>
+  </td></tr>
+
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" class="shell" style="width:640px;max-width:640px">
+  <tr><td class="pad" style="padding:16px 28px 8px 28px;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:12px;line-height:1.55;color:#5c6b66;text-align:justify">
+    Dotazy a zkušenosti z nasazení posílejte WMS týmu. Čísla v tomto sdělení pocházejí z měření na referenční instanci v září 2026; na zákaznických datech se objemy liší, metodika ne.
+  </td></tr>
+</table>
+
+</td></tr>
+</table>
+</body>
+</html>

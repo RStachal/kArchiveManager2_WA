@@ -1,0 +1,256 @@
+KODYS — INTERNÍ SDĚLENÍ                                       08.10.2026
+========================================================================
+
+k.ARCHIVE MANAGER 2.0
+
+Univerzální auditovaná archivace dle procesů. Implementována řada
+bezpečnostních mechanismů. Testováno na procesech WMS Edge a WMS Advantage.
+
+
+------------------------------------------------------------------------
+K ČEMU TO JE — WMS DATABÁZE ROSTE NAVŽDY
+------------------------------------------------------------------------
+
+Objednávka z roku 2019 se nikdy nesmaže, protože si na to nikdo netroufne.
+Zálohy se prodlužují, reindexace trvá déle, disk roste. Mazací skript
+problém řeší jen zdánlivě — co smaže, je pryč.
+
+k.Archive Manager řádek nemaže, STĚHUJE HO. Archiv je systém záznamu:
+zůstává dotazovatelný, zálohovaný a obnovitelný. Zdrojová tabulka se tím
+zmenší, historie se neztratí.
+
+  01  PREP — výběr
+      Běží jednou denně těsně po pracovní době. Projde zdroj podle
+      konfigurace a uloží si klíče dokumentů, které pravidlům vyhovují.
+      Čistě čtení; nemaže nic.
+
+  02  RUN — přesun
+      Jedním příkazem zapíše řádek do archivu a smaže ho ze zdroje. Běží
+      jen po striktně vyhrazenou dobu ve svém okně — ve výchozím profilu
+      55 minut. Co nestihne, přenese se do dalšího spuštění.
+
+  03  Archiv
+      Vlastní databáze se stejnou strukturou tabulek, s vlastním
+      zálohováním a možností obnovy dokumentu zpět.
+
+
+------------------------------------------------------------------------
+JAK VYBÍRÁ — JEDNOTKOU JE DOKUMENT, NE TABULKA
+------------------------------------------------------------------------
+
+Nearchivuje se „tabulka objednávek“. Archivuje se OBJEDNÁVKA — hlavička a
+všechny její řádky, komentáře, obaly a stavy. Buď odejde celý dokument,
+nebo nic. V nasazení pro Warehouse Advantage je takto popsáno šest
+dokumentových sad nad 23 tabulkami.
+
+Dvě strategie podle tvaru dat. U ANCHOR se hlavička maže jako poslední, až
+po všech dětech — proto je přerušení bezpečné: nejhorší možný stav je
+dokument, jehož děti už jsou v archivu a hlavička ještě ve zdroji. Doběhne
+se a je hotovo. U TIMESTAMP jde první řídící tabulka a ostatní ji
+následují; tak se archivuje fronta práce, která hlavičku nemá.
+
+Co dokument zadrží, je BRÁNA: objednávka musí být odeslaná, pick musí být
+SHIPPED, nákupka uzavřená. K tomu retence — jak daleko zpět musí být
+dokument okamžitě po ruce. To je jediné skutečné rozhodnutí, které od
+zákazníka potřebujeme.
+
+JAK TO VYPADÁ NA WMS ADVANTAGE
+
+  Sada                 Strategie   Kotva           Klíč          Tab.
+  ---------------------------------------------------------------------
+  AAD_ORDER_ARCH       ANCHOR      t_order         ORDER_NUMBER     8
+  AAD_PO_ARCH          ANCHOR      t_po_master     PO_NUMBER        5
+  AAD_PICKDETAIL_ARCH  ANCHOR      t_pick_detail   PICK_ID          3
+  AAD_TRANLOG_ARCH     ANCHOR      t_tran_log      TRAN_LOG_ID      3
+  AAD_WORKQ_ARCH       TIMESTAMP   t_work_q        WORK_Q_ID        4
+  ADV_LOGMSG_ARCH      ANCHOR      t_log_message   LOG_ROW          1
+
+Objednávka je největší dokument — osm tabulek, ze kterých odejdou buď
+všechny řádky, nebo žádný. Součet ve sloupci dává 24, zatímco tabulek je
+23: t_work_q_dependency patří do dvou sad najednou, což konfigurace
+dovoluje. Pět sad čte databázi AAD, šestá ADV — jedna konfigurace tedy
+obsluhuje dvě zdrojové databáze zároveň. Retence je 90 dní, u aplikačního
+logu v ADV kratší.
+
+JAK TO VYPADÁ NA WMS EDGE
+
+Edge má úplně jiné schéma než Warehouse Advantage — jiné názvy tabulek,
+jiný tvar dokladů. Konfigurační model je ale stejný, takže se nic
+neprogramuje, jen popisuje. Pro Edge (a shodně pro KMWEBV) je v balíčku
+odzkoušeno pět procesů:
+
+  Proces               Strategie   Kotva            Klíč         Tab.
+  ---------------------------------------------------------------------
+  RECEIVING            ANCHOR      BACKRH           PO_NUM          2
+  SHIPPING             ANCHOR      SHIPHIST         PACKSLIP        6
+  RF_LOG2              TIMESTAMP   RF_LOG2          ROWID           1
+  INTEGRACE_DNLOAD     TIMESTAMP   DNLOAD_ARCHIVE   ROWID           1
+  INTEGRACE_UPLOAD     TIMESTAMP   UPLOADARCHIVE    ROWID           1
+
+Příjem a expedice mají hlavičku, a jdou proto přes ANCHOR: dokumentem je
+příjemka pod PO_NUM, respektive dodací list pod PACKSLIP, a hlavička se
+maže až po všech detailech — u expedice se takto drží pohromadě šest
+tabulek. Systémový log a obě integrační fronty hlavičku nemají; dokumentem
+je tam samotný řádek pod ROWID, takže jedou přes TIMESTAMP. Retence je u
+všech pěti 540 dní.
+
+
+------------------------------------------------------------------------
+MĚŘENO, NE TVRZENO — CO UKÁZALY TESTY
+------------------------------------------------------------------------
+
+  2 986 057   řádků archivováno — a přesně tolik smazáno. Divergence nula.
+    475 566   zdrojových řádků za 60 s v jedné sadě, každý předtím zapsaný
+              do archivu
+    23 / 23   tabulek archivu sedělo s předpovědí na řádek přesně
+          0   blockerů v go-live kontrole nasazeného prostředí
+
+Měřeno na SQL Serveru 2022, collation Czech_CS_AS, nad databázemi AAD
+(394 tabulek) a ADV (47 tabulek), na reálných zákaznických datech i na
+objemovém testu. Září 2026.
+
+
+------------------------------------------------------------------------
+SELEKTIVITA — ODEJDE JEN TO, CO SPLNÍ PRAVIDLO
+------------------------------------------------------------------------
+
+Nejpřesvědčivější číslo není kolik se smazalo, ale KOLIK ZŮSTALO. Jeden
+běh nad reálnými daty zákazníka (odešlo do archivu / zůstalo ve zdroji):
+
+  t_tran_log        9 008  /      0
+  t_work_q          2 733  /     ~0
+  t_po_master         124  /    111
+  t_order             334  /    509
+  t_pick_detail        56  /  1 132
+
+t_pick_detail drží 1 132 z 1 188 řádků, protože jen 56 picků je ve stavu
+SHIPPED a zároveň za hranicí retence. Při objemovém testu zůstalo ve
+zdrojové tabulce picků přesně 15 000 ze 75 000 řádků — tedy přesně tolik,
+kolik jich bránou neprošlo.
+
+
+------------------------------------------------------------------------
+PROČ TOMU JDE VĚŘIT NA PRODUKCI — BEZPEČNOSTNÍ MECHANISMY
+------------------------------------------------------------------------
+
+* Archivace a mazání jsou jeden příkaz. Řádek se maže příkazem, jehož
+  výstup zapisuje mazané řádky rovnou do archivu. Stav „smazáno,
+  nezazálohováno“ nemůže vzniknout — ne proto, že se hlídá, ale protože to
+  jinak neumí.
+
+* Kontrola divergence. Každý běh počítá zvlášť archivované a smazané
+  řádky; rozdíl musí být nula.
+
+* Do WMS databáze se nesahá. Jen SELECT a DELETE na pojmenovaných
+  tabulkách. Žádný index, sloupec ani trigger. Požadavky na indexy nástroj
+  vypíše i s hotovým DDL, ale NEVYTVOŘÍ JE — to je rozhodnutí DBA
+  zákazníka.
+
+* Běhový účet nesmí být sysadmin. Má jen čtení a mazání na mapovaných
+  tabulkách. Job se odmítne spustit, pokud ho vlastní sysadmin.
+
+* Konfigurace nesmí obsahovat kód. Spojovací podmínky a výrazy procházejí
+  kontrolou, která odmítne poddotaz, příkaz i volání procedury. Cutoff
+  musí mít časovou zónu, jinak neprojde.
+
+* Omezený dopad. Nejvýš 4 000 řádků na transakci (nad tím SQL Server
+  eskaluje zámek na celou tabulku), běhové okno, aplikační zámek proti
+  souběhu, prodleva mezi dávkami. Nástroj je navržen jako přerušitelný, ne
+  jako rychlý.
+
+* Přerušení je normální stav. Rozpracovaná dávka se uloží i s
+  nezpracovanými klíči a příště pokračuje. Běh se označí jako neúspěšný —
+  nikdy se neodvozuje, že dopadl dobře, ani když počty sedí.
+
+* Veškerá manipulace s daty je auditovaná. Vždy a u všech procesů se
+  eviduje každý běh s počty dávek, dokumentů a řádků, každá změna
+  konfigurace s tím, kdo ji provedl, kdy a proč, i každé přihlášení do
+  konzole. Nad rámec toho lze u každého procesu zapnout stopu na
+  jednotlivý dokument: co odešlo, pod jakým klíčem, kdy vzniklo, kdy bylo
+  smazáno a zda bylo předtím archivováno. Ta je na úrovni databáze
+  chráněná proti úpravě i smazání, nejen aplikačně. U objemných logů se
+  obvykle nechává vypnutá — dokumentem je tam jediný řádek, takže by stopa
+  narostla stejně jako archiv. Je to vědomé rozhodnutí, ne tiché
+  opomenutí: go-live kontrola sama vypíše, které procesy ji zapnutou
+  nemají.
+
+* Pojistky k zapnutí. Legal hold (dokument pod držením se nesmaže, i když
+  držení přišlo až po přípravě dávky), režim pouze kopírovat, retenční
+  podlaha a náhled nanečisto.
+
+
+------------------------------------------------------------------------
+V PRAXI — OPERÁTOROVI STAČÍ WEBOVÁ KONZOLE
+------------------------------------------------------------------------
+
+Žádné SSMS, žádný přístup do databáze. Dashboard s objemy a provozními
+signály, historie běhů, vyhledání dokumentu, odhady, konfigurace,
+validace, go-live kontrola a legal holdy. Čtení je anonymní, EDITACE
+VYŽADUJE PŘIHLÁŠENÍ a zapisuje se do auditu.
+
+  Denní pohled, objemy, signály ........ Dashboard
+  Co kdy odešlo ........................ Runs
+  „Kde je objednávka 12345?“ ........... Document lookup
+  Kolik vezme příští běh, kolik místa .. Analysis & Estimates
+  Kontrola před změnou, návrhy indexů .. Validation
+  Podmínky pro ostrý provoz ............ Go-live
+
+Od zákazníka potřebujeme šest rozhodnutí, ne úkoly: retenci, vyhrazený
+účet pro běh, okno pro archivaci, umístění záloh archivní databáze, kdo
+vytvoří případné indexy a kdo bude operátor.
+
+
+------------------------------------------------------------------------
+JAK SE NASAZUJE — ŠEST FÁZÍ, JEDEN SKRIPT
+------------------------------------------------------------------------
+
+Instalace není instalátor, ale sekvence. Jediný ovladač Run-Deploy.ps1
+dostane server, zdrojovou databázi a název fáze — a spustí právě tu jednu.
+Každá fáze končí vlastním ověřením, takže je vidět, že se smí pokračovat.
+
+  precheck    Jen čte. Ověří verzi a edici SQL Serveru, oprávnění a
+              prostředí. Spustitelné kdekoli, nezaloží nic.
+  deploy      Založí obě databáze — administrativní a archivní — a nahraje
+              produkt. Končí vlastními samotesty.
+  configure   Nahraje šest sad dokumentů, vygeneruje přehled chybějících
+              indexů, založí role a zvaliduje konfiguraci proti skutečnému
+              schématu WMS.
+  runtime     Vypíše ruční kroky: servisní účet pro běh a pět jobů SQL
+              Agenta. Ručně schválně — heslo do skriptu nepatří.
+  test        Testovací data a běh nanečisto. Spočítá, co by odešlo, a
+              nesmaže nic.
+  realrun     První ostrý běh. Maže — a proto se nespustí bez výslovného
+              potvrzení parametrem -IConfirm.
+
+Hromadná fáze „all“ SCHVÁLNĚ KONČÍ PŘED „realrun“. Celé nasazení tak lze
+projet jedním příkazem až do hotového, otestovaného a stále nic
+nemazajícího stavu; první smazání je vždycky samostatné rozhodnutí
+člověka.
+
+KONZOLE A JOBY
+
+Webová konzole je obyčejná IIS aplikace — na serveru stačí doinstalovat
+.NET 10 Hosting Bundle. Pravidelný provoz pak obstará pět jobů SQL Agenta:
+PREP připraví dávky, RUN je zpracuje ve svém okně, RECOVER STALE RUNS
+uklidí po neplánovaném pádu a dva zálohovací joby drží archivní databázi
+obnovitelnou.
+
+
+------------------------------------------------------------------------
+KDE JI VZÍT — REPOZITÁŘ
+------------------------------------------------------------------------
+
+Kompletní balíček: produkt, webová konzole, konfigurace pro Warehouse
+Advantage, testovací seedy, ověřovací skripty, nasazovací postup a
+dokumentace.
+
+https://tfs.kodys.cz:8443/GitCollection/Kodys%20-%20K.Archive%20Manager%202.0%20(WA)/_git/kArchiveManager2_WA.git
+
+Začněte souborem README.md (proč konfigurace vypadá, jak vypadá) a
+DEPLOYMENT.md (nasazení po fázích, každá se zastavovací podmínkou).
+
+
+------------------------------------------------------------------------
+Dotazy a zkušenosti z nasazení posílejte WMS týmu. Čísla v tomto sdělení
+pocházejí z měření na referenční instanci v září 2026; na zákaznických
+datech se objemy liší, metodika ne.
