@@ -22,7 +22,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $AppSource = (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app'),
+    [string] $AppSource = '',
     [Parameter(Mandatory = $true)]
     [string] $SqlServer,
     [string] $SqlLogin  = 'karch_console',
@@ -33,6 +33,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Aplikace muze lezet bud vedle skriptu (samostatny balicek .\app) nebo
+# v klonu repozitare (..\kAM2\02-admin-console\app). Hleda se v tomto poradi.
+function Resolve-AppSource {
+    param([string] $Hint)
+    if ($Hint -and (Test-Path (Join-Path $Hint 'KArchiveManager.AdminConsole.Api.dll'))) { return $Hint }
+    $kandidati = @(
+        (Join-Path $PSScriptRoot 'app'),
+        (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app')
+    )
+    foreach ($k in $kandidati) {
+        if (Test-Path (Join-Path $k 'KArchiveManager.AdminConsole.Api.dll')) { return $k }
+    }
+    throw "Aplikace nenalezena. Hledal jsem:`n  " + ($kandidati -join "`n  ") + "`nPredejte cestu parametrem -AppSource."
+}
+$AppSource = Resolve-AppSource -Hint $AppSource
 function Ok($t)   { Write-Host "   OK  $t" -ForegroundColor Green }
 function Warn($t) { Write-Host "   !!  $t" -ForegroundColor Yellow }
 

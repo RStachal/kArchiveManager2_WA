@@ -92,6 +92,22 @@ function NewTempSql {
     return $tmp
 }
 
+# Hash hesla operatora. Dodavany navod posila na "dotnet ... hash-password", coz
+# by do balicku pritahlo celou aplikaci (11 MB) a vyzadovalo dotnet na SQL serveru.
+# Format je PBKDF2-SHA256$<iteraci>$<base64 sul>$<base64 klic>, tedy PBKDF2 s
+# HMAC-SHA256, 100 000 iteraci, sul 16 B, klic 32 B. Overeno proti vystupu
+# aplikace na shodnem paru - vysledek je bajt za bajtem stejny.
+function New-OperatorHash {
+    param([Parameter(Mandatory = $true)][string] $Password)
+    $iter = 100000
+    $salt = [byte[]]::new(16)
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($salt)
+    $k = New-Object Security.Cryptography.Rfc2898DeriveBytes(
+            $Password, $salt, $iter, [Security.Cryptography.HashAlgorithmName]::SHA256)
+    try { $key = $k.GetBytes(32) } finally { $k.Dispose() }
+    return 'PBKDF2-SHA256$' + $iter + '$' + [Convert]::ToBase64String($salt) + '$' + [Convert]::ToBase64String($key)
+}
+
 function NewPassword {
     $ok = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'.ToCharArray()
     $sp = '-_.#+='.ToCharArray()
@@ -252,13 +268,8 @@ EXEC sys.sp_executesql @g;
 Ok 'EXECUTE na operatorske API prideleno rolim karch_config_admin a karch_advanced_admin'
 
 $hesla["operator $OperatorName"] = NewPassword
-$dll = Join-Path $appDir 'KArchiveManager.AdminConsole.Api.dll'
-if (-not (Test-Path $dll)) { throw "Chybi $dll - bez nej nelze spocitat hash hesla operatora." }
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw 'Chybi dotnet - potreba na vypocet hashe hesla operatora (ASP.NET Core Runtime 10).' }
-Push-Location $appDir
-try { $hash = (& dotnet KArchiveManager.AdminConsole.Api.dll hash-password $hesla["operator $OperatorName"] 2>&1 | Select-Object -Last 1).Trim() }
-finally { Pop-Location }
-if ($hash -notmatch '^PBKDF2-SHA256\$') { throw "hash-password vratil necekany vystup: $hash" }
+$hash = New-OperatorHash $hesla["operator $OperatorName"]
+if ($hash -notmatch '^PBKDF2-SHA256\$100000\$') { throw "Vypocet hashe selhal: $hash" }
 
 $o = NewTempSql -Source (Join-Path $addOns '064_console_default_operator.sql') -Replace @{
     "N'CHANGE-ME';   -- <-- paste hash-password output here" = "N'$hash';"

@@ -44,7 +44,7 @@ param(
     [string] $SourceDb,                                   # jen pro -AuthMode Windows
     [string] $SqlLogin    = 'karch_console',
     [string] $SqlPassword,                                # jen pro -AuthMode SqlLogin
-    [string] $AppSource   = (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app'),
+    [string] $AppSource   = '',
     [string] $SitePath    = 'C:\inetpub\kArchiveManager\AdminConsole',
     [string] $AppPoolName = 'kAM Admin Console',
     [string] $SiteName    = 'kAM Admin Console',
@@ -53,6 +53,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Aplikace muze lezet bud vedle skriptu (samostatny balicek .\app) nebo
+# v klonu repozitare (..\kAM2\02-admin-console\app). Hleda se v tomto poradi.
+function Resolve-AppSource {
+    param([string] $Hint)
+    if ($Hint -and (Test-Path (Join-Path $Hint 'KArchiveManager.AdminConsole.Api.dll'))) { return $Hint }
+    $kandidati = @(
+        (Join-Path $PSScriptRoot 'app'),
+        (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app')
+    )
+    foreach ($k in $kandidati) {
+        if (Test-Path (Join-Path $k 'KArchiveManager.AdminConsole.Api.dll')) { return $k }
+    }
+    throw "Aplikace nenalezena. Hledal jsem:`n  " + ($kandidati -join "`n  ") + "`nPredejte cestu parametrem -AppSource."
+}
+$AppSource = Resolve-AppSource -Hint $AppSource
 $krok = 0
 function Nadpis($t) { $script:krok++; Write-Host "`n== $script:krok) $t" -ForegroundColor Cyan }
 function Ok($t)     { Write-Host "   OK   $t" -ForegroundColor Green }
