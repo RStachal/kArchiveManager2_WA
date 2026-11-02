@@ -27,7 +27,7 @@
     pak heslo neobsahuje. Doporuceno.
 
 .EXAMPLE
-    .\Install-Console-Remote.ps1 -SqlServer 192.168.120.128 -SqlPassword 'xxx' -UseEnvVar
+    .\Install-Console-Remote.ps1 -SqlServer <sql-server> -SqlPassword 'heslo' -UseEnvVar
 #>
 [CmdletBinding()]
 param(
