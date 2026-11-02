@@ -32,7 +32,7 @@
 
 .EXAMPLE
     # konzole na jinem stroji
-    .\Deploy-Console.ps1 -AuthMode SqlLogin -SqlServer 192.168.1.10 -SqlPassword 'heslo'
+    .\Deploy-Console.ps1 -AuthMode SqlLogin -SqlServer 192.168.1.10
 #>
 [CmdletBinding()]
 param(
@@ -81,7 +81,15 @@ function Test-IisInstalled {
     return (Test-Path (Join-Path $env:windir 'System32\inetsrv\appcmd.exe'))
 }
 
-if ($AuthMode -eq 'SqlLogin' -and -not $SqlPassword) { throw 'Pro -AuthMode SqlLogin je nutny -SqlPassword.' }
+# Heslo radeji dotazem nez parametrem: v prikazove radce by zustalo v historii
+# PowerShellu, a pri vkladani navodu se snadno zkomoli (zastupne <zavorky> navic
+# PowerShell cte jako presmerovani a prikaz se vubec nespusti).
+if ($AuthMode -eq 'SqlLogin' -and -not $SqlPassword) {
+    $sec = Read-Host -Prompt 'Heslo uctu karch_console (z vypisu Deploy-Database.ps1)' -AsSecureString
+    $SqlPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    if (-not $SqlPassword) { throw 'Heslo nezadano.' }
+}
 if ($AuthMode -eq 'Windows'  -and -not $SourceDb)    { throw 'Pro -AuthMode Windows je nutny -SourceDb (prideluje se na nem cteni).' }
 
 Write-Host "`n=== Admin Console - nasazeni na $env:COMPUTERNAME ===" -ForegroundColor White

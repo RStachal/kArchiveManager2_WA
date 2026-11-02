@@ -21,11 +21,19 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $RepoRoot = $PSScriptRoot,
-    [string] $OutDir   = (Join-Path $PSScriptRoot 'dist')
+    [string] $RepoRoot,
+    [string] $OutDir
 )
 
 $ErrorActionPreference = 'Stop'
+# $PSScriptRoot neni v param() spolehlive dostupny u kazdeho zpusobu spusteni
+# (napr. powershell -File), proto se koren urcuje az v tele skriptu.
+if (-not $RepoRoot) {
+    $RepoRoot = if ($PSScriptRoot) { $PSScriptRoot }
+                elseif ($PSCommandPath) { Split-Path $PSCommandPath -Parent }
+                else { Split-Path $MyInvocation.MyCommand.Path -Parent }
+}
+if (-not $OutDir) { $OutDir = Join-Path $RepoRoot 'dist' }
 function Ok($t)   { Write-Host "   OK   $t" -ForegroundColor Green }
 function Warn($t) { Write-Host "   !!   $t" -ForegroundColor Yellow }
 
@@ -75,12 +83,14 @@ PREDPOKLADY
   * dotnet NENI potreba
 
 SPUSTENI (PowerShell jako spravce)
+  POZOR: SQLSERVER nahradte skutecnym nazvem nebo IP. Nepouzivejte zastupne
+  <zavorky> - PowerShell je cte jako presmerovani a prikaz se nespusti.
 
   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-  .\Deploy-Database.ps1 -Server <sql-server> -SourceDb <databaze-wms>
+  .\Deploy-Database.ps1 -Server SQLSERVER -SourceDb KMWE
 
   Nasazeni nanecisto pres existujici (SMAZE obe databaze produktu):
-  .\Deploy-Database.ps1 -Server <sql-server> -SourceDb <databaze-wms> -Clean
+  .\Deploy-Database.ps1 -Server SQLSERVER -SourceDb KMWE -Clean
 
   Kdyz je zdrojova databaze na compatibility level nizsim nez 130, skript
   skonci a rekne proc. Zvyseni je zasah do WMS databaze, proto se dela jen
@@ -149,6 +159,8 @@ PREDPOKLADY
   * Databazova cast uz musi byt nasazena (kAM2-Database.zip)
 
 SPUSTENI (PowerShell jako spravce)
+  POZOR: SQLSERVER nahradte skutecnym nazvem nebo IP. Nepouzivejte zastupne
+  <zavorky> - PowerShell je cte jako presmerovani a prikaz se nespusti.
 
   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
@@ -157,22 +169,23 @@ SPUSTENI (PowerShell jako spravce)
      zadne heslo:
 
      .\Deploy-Console.ps1 -AuthMode Windows -SqlServer localhost `
-         -SourceDb <databaze-wms> -InstallIis
+         -SourceDb KMWE -InstallIis
 
   B) Konzole bezi JINDE, nebo stroje nejsou v domene
-     Pouzije SQL login karch_console s heslem z Deploy-Database.ps1:
+     Skript se na heslo uctu karch_console zepta - neni treba ho psat do
+     prikazu, kde by zustalo v historii PowerShellu.
 
-     .\Deploy-Console.ps1 -AuthMode SqlLogin -SqlServer <sql-server> `
-         -SqlPassword '<heslo karch_console>' -InstallIis
+     .\Deploy-Console.ps1 -AuthMode SqlLogin -SqlServer SQLSERVER `
+         -InstallIis
 
 OVERENI
-  .\Test-ConsoleConnection.ps1 -SqlServer <sql-server> -SqlPassword '<heslo>'
+  .\Test-ConsoleConnection.ps1 -SqlServer SQLSERVER
 
   Projde fond IIS, AspNetCoreModuleV2, port 1433, skutecne prihlaseni, pet roli
   karch_* i DMV pravo, a nakonec /health, /api/readiness a /api/dashboard.
 
 BEZ IIS (jen na vyzkouseni, ne pro provoz)
-  .\Start-Console-Standalone.ps1 -SqlServer <sql-server> -SqlPassword '<heslo>'
+  .\Start-Console-Standalone.ps1 -SqlServer SQLSERVER
 
   Bezi v popredi okna - zavrenim okna konci, po restartu nenaskoci. Na provoz
   pouzijte IIS.
@@ -195,10 +208,22 @@ function Test-Zip {
     param([string] $Zip, [string[]] $Musi)
     $a = [IO.Compression.ZipFile]::OpenRead($Zip)
     try { $jmena = $a.Entries.FullName } finally { $a.Dispose() }
+
+    # Specifikace ZIP vyzaduje dopredna lomitka. Compress-Archive ve Windows
+    # PowerShellu 5.1 zapisuje zpetna, cimz vznikne balicek, ktery 7-Zip i nahled
+    # na GitHubu zobrazuji spatne. Sestavujte proto pod PowerShellem 7 (pwsh).
+    $zpetna = @($jmena | Where-Object { $_ -like '*\*' })
+    if ($zpetna.Count -gt 0) {
+        throw ("V $(Split-Path $Zip -Leaf) maji polozky zpetna lomitka ($($zpetna.Count) z $($jmena.Count)). " +
+               "Compress-Archive v PowerShellu $($PSVersionTable.PSVersion) zapisuje '\' misto '/'. " +
+               'Sestavte balicky pod PowerShellem 7:  pwsh -File Build-Packages.ps1')
+    }
+
     $chybi = @()
     foreach ($m in $Musi) { if (-not ($jmena -contains $m)) { $chybi += $m } }
     if ($chybi) { throw ("V $(Split-Path $Zip -Leaf) chybi:`n  " + ($chybi -join "`n  ")) }
     Ok ("$(Split-Path $Zip -Leaf): vsech $($Musi.Count) klicovych polozek na miste, celkem $($jmena.Count) souboru")
+
     # heslo se do balicku nesmi dostat
     $a = [IO.Compression.ZipFile]::OpenRead($Zip)
     try {
@@ -208,9 +233,10 @@ function Test-Zip {
             if ($txt -match 'Password\s*=\s*[''"][A-Za-z0-9+/=_.#-]{12,}[''"]') {
                 throw "V $($e.FullName) vypada neco jako zapsane heslo."
             }
+            if ($txt -match ([regex]::Escape("Users\\") + "[a-z]+" + [regex]::Escape("\\"))) { throw "V $($e.FullName) je osobni cesta." }
         }
     } finally { $a.Dispose() }
-    Ok "$(Split-Path $Zip -Leaf): zadne zapsane heslo"
+    Ok "$(Split-Path $Zip -Leaf): zadne zapsane heslo ani osobni cesta"
 }
 
 Test-Zip -Zip $dbZip -Musi @(
