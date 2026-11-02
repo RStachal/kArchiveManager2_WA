@@ -62,13 +62,35 @@ function Nadpis($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
 function Ok($t)     { Write-Host "   OK   $t" -ForegroundColor Green }
 function Warn($t)   { Write-Host "   !!   $t" -ForegroundColor Yellow }
 
-$baseUrl = "https://raw.githubusercontent.com/RStachal/kArchiveManager2_WA/$Branch/dist"
+$repo = 'RStachal/kArchiveManager2_WA'
+
+# raw.githubusercontent.com serviruje obsah vetve z mezipameti a po pushi vraci
+# jeste nekolik minut STAROU verzi. URL pripnuta na commit je naproti tomu
+# nemenna, proto se vetev nejdriv prelozi na SHA a stahuje se podle nej.
+function Resolve-Ref {
+    param([string] $Ref)
+    if ($Ref -match '^[0-9a-f]{40}$') { return $Ref }
+    try {
+        $r = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/commits/$Ref" `
+                -Headers @{ 'User-Agent' = 'kAM2-installer' } -TimeoutSec 20
+        return $r.sha
+    }
+    catch {
+        Warn "SHA vetve $Ref se nepodarilo zjistit ($($_.Exception.Message))."
+        Warn 'Stahuji pres vetev - pri cerstvem pushi muze prijit starsi verze z mezipameti.'
+        return $Ref
+    }
+}
 
 Write-Host "`n=== kArchiveManager 2.0 ===" -ForegroundColor White
 Write-Host "    cast $Part / cil $TargetDir / vetev $Branch"
 
 # TLS 1.2 - starsi Windows PowerShell ho sam nezapne a GitHub nic nizsiho neprijme
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+$ref = Resolve-Ref $Branch
+$baseUrl = "https://raw.githubusercontent.com/$repo/$ref/dist"
+if ($ref -ne $Branch) { Write-Host "    commit $($ref.Substring(0,12))" }
 
 Nadpis 'Stazeni'
 if (-not (Test-Path $TargetDir)) { New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null }
