@@ -74,6 +74,13 @@ function Nadpis($t) { $script:krok++; Write-Host "`n== $script:krok) $t" -Foregr
 function Ok($t)     { Write-Host "   OK   $t" -ForegroundColor Green }
 function Warn($t)   { Write-Host "   !!   $t" -ForegroundColor Yellow }
 
+# IIS se NESMI detekovat pres Get-Module -ListAvailable: modul WebAdministration
+# vyzaduje elevaci, takze bez prav spravce vrati nulu i na stroji, kde IIS je.
+# Autoritativni je pritomnost appcmd.exe, ta zadnou elevaci nepotrebuje.
+function Test-IisInstalled {
+    return (Test-Path (Join-Path $env:windir 'System32\inetsrv\appcmd.exe'))
+}
+
 if ($AuthMode -eq 'SqlLogin' -and -not $SqlPassword) { throw 'Pro -AuthMode SqlLogin je nutny -SqlPassword.' }
 if ($AuthMode -eq 'Windows'  -and -not $SourceDb)    { throw 'Pro -AuthMode Windows je nutny -SourceDb (prideluje se na nem cteni).' }
 
@@ -90,7 +97,7 @@ Ok 'bezi jako spravce'
 
 # ------------------------------------------------------------------- 2) IIS
 Nadpis 'Role IIS'
-if (-not (Get-Module -ListAvailable -Name WebAdministration)) {
+if (-not (Test-IisInstalled)) {
     if (-not $InstallIis) {
         throw @'
 Role IIS neni nainstalovana. Spustte znovu s -InstallIis, nebo ji doinstalujte rucne:
@@ -108,7 +115,7 @@ Po instalaci muze byt nutny restart.
     else {
         Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console -IncludeManagementTools | Out-Null
     }
-    if (-not (Get-Module -ListAvailable -Name WebAdministration)) {
+    if (-not (Test-IisInstalled)) {
         throw 'Role IIS se nainstalovala, ale modul WebAdministration zatim neni k dispozici. Restartujte stroj a spustte skript znovu.'
     }
     Ok 'role IIS nainstalovana'

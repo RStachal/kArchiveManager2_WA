@@ -48,7 +48,8 @@ Write-Host "`n== Balicek kAM2-Database" -ForegroundColor Cyan
 $db = Join-Path $stage 'database'
 New-Item -ItemType Directory -Path $db -Force | Out-Null
 
-Add-Item2 'Deploy-Database.ps1' $db
+Add-Item2 'Deploy-Database.ps1'  $db
+Add-Item2 'Uninstall-kAM2.ps1'    $db
 Add-Item2 'Run-Deploy.ps1'      $db
 # cely sql\ - jsou to jen textove skripty a Run-Deploy saha i na dalsi faze
 Add-Item2 'sql' $db
@@ -117,6 +118,7 @@ foreach ($p in @('console\Deploy-Console.ps1',
     Add-Item2 $p $co -As (Split-Path $p -Leaf)
 }
 # aplikace jde do .\app, kde si ji skripty najdou samy
+Add-Item2 'Uninstall-kAM2.ps1' $co
 Add-Item2 'kAM2\02-admin-console\app' $co -As 'app'
 if (Test-Path (Join-Path $co 'app\logs')) { Remove-Item (Join-Path $co 'app\logs') -Recurse -Force }
 # DEPLOYMENT_SUMMARY.txt generuje publikacni skript, beh aplikace ho nepouziva
@@ -212,7 +214,7 @@ function Test-Zip {
 }
 
 Test-Zip -Zip $dbZip -Musi @(
-    'Deploy-Database.ps1', 'Run-Deploy.ps1', 'SPUSTENI.txt',
+    'Deploy-Database.ps1', 'Run-Deploy.ps1', 'Uninstall-kAM2.ps1', 'SPUSTENI.txt',
     'sql/01_precheck.sql', 'sql/02_databases.sql', 'sql/56_agent_jobs.sql',
     'sql/60_configure_kmwe_edge.sql', 'sql/61_console_principal_sql_login.sql',
     'kAM2/01-database/deploy_clean_v2_full.sql',
@@ -223,7 +225,7 @@ Test-Zip -Zip $dbZip -Musi @(
     'kAM2/01-database/operational-add-ons/064_console_default_operator.sql')
 
 Test-Zip -Zip $coZip -Musi @(
-    'Deploy-Console.ps1', 'Start-Console-Standalone.ps1', 'Test-ConsoleConnection.ps1',
+    'Deploy-Console.ps1', 'Start-Console-Standalone.ps1', 'Test-ConsoleConnection.ps1', 'Uninstall-kAM2.ps1',
     'SPUSTENI.txt',
     'app/KArchiveManager.AdminConsole.Api.dll',
     'app/appsettings.json',
