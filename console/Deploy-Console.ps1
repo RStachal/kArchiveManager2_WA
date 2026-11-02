@@ -81,6 +81,19 @@ function Test-IisInstalled {
     return (Test-Path (Join-Path $env:windir 'System32\inetsrv\appcmd.exe'))
 }
 
+# Pritomnost appcmd.exe jeste neznamena, ze se da IIS ridit z PowerShellu: po
+# cerstve instalaci role nejsou zaregistrovane COM komponenty a provider pada na
+# REGDB_E_CLASSNOTREG, dokud se stroj nerestartuje. Jedina spolehliva kontrola
+# je provider zkusit pouzit.
+function Test-IisUsable {
+    try {
+        Import-Module WebAdministration -ErrorAction Stop
+        $null = Get-Website -ErrorAction Stop
+        return $true
+    }
+    catch { return $false }
+}
+
 # Heslo radeji dotazem nez parametrem: v prikazove radce by zustalo v historii
 # PowerShellu, a pri vkladani navodu se snadno zkomoli (zastupne <zavorky> navic
 # PowerShell cte jako presmerovani a prikaz se vubec nespusti).
@@ -123,10 +136,24 @@ Po instalaci muze byt nutny restart.
     else {
         Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console -IncludeManagementTools | Out-Null
     }
-    if (-not (Test-IisInstalled)) {
-        throw 'Role IIS se nainstalovala, ale modul WebAdministration zatim neni k dispozici. Restartujte stroj a spustte skript znovu.'
+    if (-not (Test-IisUsable)) {
+        throw @'
+Role IIS se nainstalovala, ale jeste ji nelze ridit z PowerShellu - COM
+komponenty IIS se registruji az po restartu (jinak provider pada na
+REGDB_E_CLASSNOTREG / "Trida neni zaregistrovana").
+
+RESTARTUJTE STROJ a spustte skript znovu. Podruhe uz roli instalovat nebude
+a pokracuje dal.
+'@
     }
-    Ok 'role IIS nainstalovana'
+    Ok 'role IIS nainstalovana a funkcni'
+}
+if (-not (Test-IisUsable)) {
+    throw @'
+IIS je nainstalovany, ale provider WebAdministration nefunguje
+(REGDB_E_CLASSNOTREG). Nejcasteji to znamena, ze se role instalovala a stroj
+od te doby nebyl restartovan. Restartujte stroj a spustte skript znovu.
+'@
 }
 Import-Module WebAdministration
 Ok 'modul WebAdministration'
