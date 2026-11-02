@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Nasadí Admin Console na IIS na stroji, který NENÍ SQL serverem.
 
@@ -31,7 +31,11 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $PayloadZip  = (Join-Path $PSScriptRoot 'AdminConsole-payload.zip'),
+    # Výchozí zdroj je aplikace přímo z repozitáře — je verzovaná, takže
+    # přežije výměnu stroje. ZIP je jen alternativa, když se nasazuje bez
+    # klonu repozitáře.
+    [string] $AppSource   = (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app'),
+    [string] $PayloadZip,
     [string] $SitePath    = 'C:\inetpub\kArchiveManager\AdminConsole',
     [string] $AppPoolName = 'kAM Admin Console',
     [string] $SiteName    = 'kAM Admin Console',
@@ -83,8 +87,19 @@ if ($dotnet) { $runtimes = & dotnet --list-runtimes 2>$null | Where-Object { $_ 
 if ($runtimes) { Ok ("Hosting Bundle: " + ($runtimes | Select-Object -First 1)) }
 else { Warn 'AspNetCoreModuleV2 je přítomen, ale ASP.NET Core 10 runtime se nepodařilo potvrdit. Pokud aplikace nenaběhne, doinstalujte .NET 10 Hosting Bundle.' }
 
-if (-not (Test-Path $PayloadZip)) { throw "Chybí balíček s aplikací: $PayloadZip" }
-Ok "Balíček: $PayloadZip"
+if ($PayloadZip) {
+    if (-not (Test-Path $PayloadZip)) { throw "Chybí balíček s aplikací: $PayloadZip" }
+    Ok "Zdroj: balíček $PayloadZip"
+}
+else {
+    if (-not (Test-Path $AppSource)) {
+        throw "Chybí aplikace: $AppSource`nSpusťte skript z klonu repozitáře, nebo předejte -PayloadZip."
+    }
+    if (-not (Test-Path (Join-Path $AppSource 'KArchiveManager.AdminConsole.Api.dll'))) {
+        throw "V $AppSource není KArchiveManager.AdminConsole.Api.dll — špatná cesta?"
+    }
+    Ok "Zdroj: $AppSource (z repozitáře)"
+}
 
 # --------------------------------------------------------- 1) dostupnost SQL
 Step "1) Dostupnost SQL Serveru $SqlServer"
@@ -106,16 +121,40 @@ try {
 catch { throw "SQL login selhal: $($_.Exception.Message)" }
 
 # ------------------------------------------------------------ 2) soubory
-Step '2) Rozbalení aplikace'
+Step '2) Nasazení souborů aplikace'
 if (Test-Path $SitePath) {
     $bak = "$SitePath.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
     Warn "Cíl existuje — původní obsah odkládám do $bak"
     Move-Item $SitePath $bak
 }
 New-Item -ItemType Directory -Path $SitePath -Force | Out-Null
-Expand-Archive -Path $PayloadZip -DestinationPath $SitePath -Force
+
+if ($PayloadZip) {
+    Expand-Archive -Path $PayloadZip -DestinationPath $SitePath -Force
+}
+else {
+    # logs/ je běhový balast předchozí instalace, nekopíruje se
+    Copy-Item (Join-Path $AppSource '*') $SitePath -Recurse -Force -Exclude 'logs'
+    if (Test-Path (Join-Path $SitePath 'logs')) { Remove-Item (Join-Path $SitePath 'logs') -Recurse -Force }
+}
 $n = (Get-ChildItem $SitePath -Recurse -File).Count
-Ok "rozbaleno souborů: $n"
+Ok "souborů: $n"
+
+# Nativní ovladač SqlClientu: NuGet ho ukládá do runtimes\win-x64\native\, odkud
+# si ho ASP.NET Core u framework-dependent nasazení sám nenajde. Bez kopie do
+# kořene konzole nenaváže spojení — to je vada č. 1 z ADMIN-CONSOLE.md.
+$sniRoot = Join-Path $SitePath 'Microsoft.Data.SqlClient.SNI.dll'
+if (-not (Test-Path $sniRoot)) {
+    $sniSrc = Join-Path $SitePath 'runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll'
+    if (Test-Path $sniSrc) {
+        Copy-Item $sniSrc $sniRoot -Force
+        Ok 'nativní ovladač SqlClientu zkopírován do kořene'
+    }
+    else {
+        Warn 'Microsoft.Data.SqlClient.SNI.dll nenalezen — konzole se nemusí připojit.'
+    }
+}
+else { Ok 'nativní ovladač SqlClientu je v kořeni' }
 
 # ------------------------------------------------------- 3) appsettings.json
 Step '3) Konfigurace'

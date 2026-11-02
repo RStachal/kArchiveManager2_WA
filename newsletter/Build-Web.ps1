@@ -1,4 +1,4 @@
-<#
+﻿<#
     Ze šablony newsletter.html vyrobí dvě odvozené podoby:
 
       newsletter_final.html  - pro publikaci (obrázky vložené jako base64)

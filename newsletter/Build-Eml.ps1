@@ -1,4 +1,4 @@
-<#
+﻿<#
     Sestaví .eml pro import do Outlooku.
 
     Proč System.Net.Mail a ne ruční MIME: korektně zakóduje UTF-8 češtinu

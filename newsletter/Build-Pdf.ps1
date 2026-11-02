@@ -1,4 +1,4 @@
-<#
+﻿<#
     Vyrobí PDF přílohu z tiskové verze newsletteru (print.html).
 
     Tiskne se bohatší webová verze, ne tělo e-mailu: má skutečné fonty a

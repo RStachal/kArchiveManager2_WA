@@ -112,24 +112,29 @@ stačí, u zákazníka bude potřeba pravidlo pro 1433.
 
 ## Nasazení konzole na RADIM-STACHAL
 
-Konzole v tomto repozitáři **není** — `console/` nesla jen `chart-legend.css`.
-Balíček `console/AdminConsole-payload.zip` (3,6 MB, 66 souborů) byl vyroben
-z běžící instalace na WA01 a je bez jakýchkoli údajů: connection string
-i `EditPasswordSha256` jsou prázdné.
+Aplikace konzole **je v repozitáři** — v `kAM2/02-admin-console/app/`, včetně
+`wwwroot`. Ověřeno, že `KArchiveManager.AdminConsole.Api.dll` je bajt za bajtem
+shodná s instalací běžící na WA01 a obě cílí na `net10.0`. Instalační skript
+proto bere soubory odtud a **žádný balíček není potřeba**; vše podstatné je
+verzované, takže to přežije výměnu stroje.
 
-Na RADIM-STACHAL, v PowerShellu **jako správce**:
+Na RADIM-STACHAL stačí mít klon repozitáře a v PowerShellu **jako správce**:
 
 ```powershell
-# 1) předpoklad: role IIS a .NET 10 Hosting Bundle
-#    POZOR: aplikace cílí na net10.0. Runtime 8 ani 9 nestačí, přestože to
-#    dodávaný handover README tvrdí. Po instalaci bundlu: iisreset
+# předpoklad: role IIS a .NET 10 Hosting Bundle
+# POZOR: aplikace cílí na net10.0. Runtime 8 ani 9 nestačí, přestože to
+# dodávaný handover README tvrdí. Po instalaci bundlu: iisreset
 
-# 2) zkopírovat z WA01 složku console\ (skript + zip) a spustit
+cd <klon>\console
 .\Install-Console-Remote.ps1 `
     -SqlServer 192.168.120.128 `
     -SqlPassword '<heslo karch_console>' `
     -UseEnvVar
 ```
+
+Bez klonu repozitáře lze předat `-PayloadZip <cesta>`. Balíček
+`console/AdminConsole-payload.zip` existuje na WA01, ale **v gitu není** a může
+zastarat — je to jen offline alternativa, ne hlavní cesta.
 
 `-UseEnvVar` uloží connection string do proměnné prostředí aplikačního fondu,
 takže heslo nezůstane v `appsettings.json` na disku.
@@ -137,6 +142,11 @@ takže heslo nezůstane v `appsettings.json` na disku.
 Skript sám ověří: práva správce, modul IIS, přítomnost `AspNetCoreModuleV2`,
 dostupnost portu 1433, **skutečné přihlášení SQL loginem**, a po nasazení
 zavolá `/health` a `/api/readiness`. Při neúspěchu vypíše nejčastější příčiny.
+
+Zároveň řeší **vadu č. 1 z `ADMIN-CONSOLE.md`**: `Microsoft.Data.SqlClient.SNI.dll`
+leží tam, kam ho uloží NuGet — v `runtimes\win-x64\native\` — a ASP.NET Core si
+ho u framework-dependent nasazení sám nenajde. Bez kopie do kořene se konzole
+k databázi nepřipojí, a skript tu kopii udělá automaticky.
 
 ## Co zbývá
 
