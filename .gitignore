@@ -40,3 +40,6 @@ desktop.ini
 /newsletter/print.html
 /newsletter/*.eml
 /newsletter/pickup/
+
+# balicek konzole - vyraben z bezici instalace, neverzuje se
+/console/AdminConsole-payload.zip

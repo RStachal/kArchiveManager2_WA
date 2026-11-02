@@ -390,7 +390,7 @@ UPDATE arch.Process SET CandidateWhereSql = NULL, CandidateOrderSql = N'DocCreat
 /* =========================== T9: cheap-mode config validation (usp_ValidateConfiguration WARN/INFO) =========================== */
 -- Rule A (WARN): CandidateSelectExpr set without a sargable CandidateWhereSql -> cheap-mode cannot activate.
 -- Rule B (INFO): both set -> cheap-mode active, remind to verify the time-column format is ISO-chronological.
-DECLARE @vfind table (Severity varchar(10), ProcessCode sysname NULL, SourceDb sysname NULL, ArchiveDb sysname NULL, ObjectName nvarchar(300) NULL, Finding nvarchar(4000), SuggestedSql nvarchar(max) NULL);
+DECLARE @vfind table (Severity varchar(10), ProcessCode sysname NULL, SourceDb sysname NULL, ArchiveDb sysname NULL, ObjectName nvarchar(300) NULL, Finding nvarchar(4000), SuggestedSql nvarchar(max) NULL, ActionKey nvarchar(60) NULL);
 DECLARE @warnCnt int, @infoCnt int;
 -- 9a: projection set, cutoff missing -> WARN must fire
 UPDATE arch.ObjectSpec SET CandidateSelectExpr = N'CONVERT(datetime2(0), t.Created)' WHERE ProcessId=@pidT;
