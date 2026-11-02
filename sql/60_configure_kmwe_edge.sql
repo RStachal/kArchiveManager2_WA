@@ -1,4 +1,4 @@
-/* ============================================================================
+﻿/* ============================================================================
    kArchiveManager 2.0 — konfigurace pro procesy WMS Edge nad databází KMWE
    ----------------------------------------------------------------------------
    Vychází z odzkoušené konfigurace Edge v seed_tested_processes.sql a upravuje

@@ -1,39 +1,39 @@
-﻿<#
+<#
 .SYNOPSIS
-    Nasadí Admin Console na IIS na stroji, který NENÍ SQL serverem.
+    Nasadi Admin Console na IIS na stroji, ktery NENI SQL serverem.
 
 .DESCRIPTION
-    Dodávaný runbook počítá s tím, že konzole běží na témže stroji jako SQL
-    Server, a připojuje se Windows autentizací přes identitu aplikačního fondu
-    IIS. Tady to nelze ze dvou důvodů:
+    Dodavany runbook pocita s tim, ze konzole bezi na temze stroji jako SQL
+    Server, a pripojuje se Windows autentizaci pres identitu aplikacniho fondu
+    IIS. Tady to nelze ze dvou duvodu:
 
-      * konzole běží na RADIM-STACHAL, SQL Server na WA01,
-      * ani jeden stroj není v doméně, takže Windows autentizace mezi nimi
+      * konzole bezi na RADIM-STACHAL, SQL Server na WA01,
+      * ani jeden stroj neni v domene, takze Windows autentizace mezi nimi
         neprojde.
 
-    Konzole se proto připojuje SQL loginem (karch_console), kterému práva
-    přidělil skript sql/61_console_principal_sql_login.sql.
+    Konzole se proto pripojuje SQL loginem (karch_console), kteremu prava
+    pridelil skript sql/61_console_principal_sql_login.sql.
 
-    Skript je bezpečné pustit opakovaně: existující aplikační fond i aplikaci
-    jen přenastaví.
+    Skript je bezpecne pustit opakovane: existujici aplikacni fond i aplikaci
+    jen prenastavi.
 
 .PARAMETER SqlPassword
     Heslo loginu karch_console. Do skriptu se nezapisuje a do appsettings.json
-    se zapíše jen tehdy, když se nepoužije -UseEnvVar.
+    se zapise jen tehdy, kdyz se nepouzije -UseEnvVar.
 
 .PARAMETER UseEnvVar
-    Heslo se nezapíše do appsettings.json, ale do proměnné prostředí
-    aplikačního fondu (ConnectionStrings__ArchiveManagerAdmin). Soubor na disku
-    pak heslo neobsahuje. Doporučeno.
+    Heslo se nezapise do appsettings.json, ale do promenne prostredi
+    aplikacniho fondu (ConnectionStrings__ArchiveManagerAdmin). Soubor na disku
+    pak heslo neobsahuje. Doporuceno.
 
 .EXAMPLE
     .\Install-Console-Remote.ps1 -SqlServer 192.168.120.128 -SqlPassword 'xxx' -UseEnvVar
 #>
 [CmdletBinding()]
 param(
-    # Výchozí zdroj je aplikace přímo z repozitáře — je verzovaná, takže
-    # přežije výměnu stroje. ZIP je jen alternativa, když se nasazuje bez
-    # klonu repozitáře.
+    # Vychozi zdroj je aplikace primo z repozitare - je verzovana, takze
+    # prezije vymenu stroje. ZIP je jen alternativa, kdyz se nasazuje bez
+    # klonu repozitare.
     [string] $AppSource   = (Join-Path (Split-Path $PSScriptRoot -Parent) 'kAM2\02-admin-console\app'),
     [string] $PayloadZip,
     [string] $SitePath    = 'C:\inetpub\kArchiveManager\AdminConsole',
@@ -56,58 +56,58 @@ function Step($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
 function Ok($t)   { Write-Host "   OK  $t" -ForegroundColor Green }
 function Warn($t) { Write-Host "   !!  $t" -ForegroundColor Yellow }
 
-# ---------------------------------------------------------------- 0) předpoklady
-Step '0) Kontrola předpokladů'
+# ---------------------------------------------------------------- 0) predpoklady
+Step '0) Kontrola predpokladu'
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
          ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Spusťte prosím jako správce (IIS i ACL to vyžadují).'
+    throw 'Spustte prosim jako spravce (IIS i ACL to vyzaduji).'
 }
 
 if (-not (Get-Module -ListAvailable -Name WebAdministration)) {
-    throw 'Chybí role IIS s modulem WebAdministration. Nainstalujte Web-Server a Web-Mgmt-Console.'
+    throw 'Chybi role IIS s modulem WebAdministration. Nainstalujte Web-Server a Web-Mgmt-Console.'
 }
 Import-Module WebAdministration
 Ok 'IIS a modul WebAdministration'
 
-# .NET 10 Hosting Bundle — NE runtime 8/9, jak tvrdí dodávaný handover README.
-# Modul AspNetCoreModuleV2 je jediný spolehlivý ukazatel, že je bundle nasazený.
+# .NET 10 Hosting Bundle - NE runtime 8/9, jak tvrdi dodavany handover README.
+# Modul AspNetCoreModuleV2 je jediny spolehlivy ukazatel, ze je bundle nasazeny.
 $ancm = Get-WebGlobalModule -Name 'AspNetCoreModuleV2' -ErrorAction SilentlyContinue
 if (-not $ancm) {
     throw @'
-Chybí AspNetCoreModuleV2 — není nainstalovaný ASP.NET Core Hosting Bundle.
-Aplikace cílí na net10.0, takže je potřeba .NET 10 Hosting Bundle
-(dotnet-hosting-10.0.x-win.exe). Runtime 8 ani 9 nestačí. Po instalaci
-bundlu spusťte: iisreset
+Chybi AspNetCoreModuleV2 - neni nainstalovany ASP.NET Core Hosting Bundle.
+Aplikace cili na net10.0, takze je potreba .NET 10 Hosting Bundle
+(dotnet-hosting-10.0.x-win.exe). Runtime 8 ani 9 nestaci. Po instalaci
+bundlu spustte: iisreset
 '@
 }
 $runtimes = @()
 $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($dotnet) { $runtimes = & dotnet --list-runtimes 2>$null | Where-Object { $_ -match 'Microsoft\.AspNetCore\.App 10\.' } }
 if ($runtimes) { Ok ("Hosting Bundle: " + ($runtimes | Select-Object -First 1)) }
-else { Warn 'AspNetCoreModuleV2 je přítomen, ale ASP.NET Core 10 runtime se nepodařilo potvrdit. Pokud aplikace nenaběhne, doinstalujte .NET 10 Hosting Bundle.' }
+else { Warn 'AspNetCoreModuleV2 je pritomen, ale ASP.NET Core 10 runtime se nepodarilo potvrdit. Pokud aplikace nenabehne, doinstalujte .NET 10 Hosting Bundle.' }
 
 if ($PayloadZip) {
-    if (-not (Test-Path $PayloadZip)) { throw "Chybí balíček s aplikací: $PayloadZip" }
-    Ok "Zdroj: balíček $PayloadZip"
+    if (-not (Test-Path $PayloadZip)) { throw "Chybi balicek s aplikaci: $PayloadZip" }
+    Ok "Zdroj: balicek $PayloadZip"
 }
 else {
     if (-not (Test-Path $AppSource)) {
-        throw "Chybí aplikace: $AppSource`nSpusťte skript z klonu repozitáře, nebo předejte -PayloadZip."
+        throw "Chybi aplikace: $AppSource`nSpustte skript z klonu repozitare, nebo predejte -PayloadZip."
     }
     if (-not (Test-Path (Join-Path $AppSource 'KArchiveManager.AdminConsole.Api.dll'))) {
-        throw "V $AppSource není KArchiveManager.AdminConsole.Api.dll — špatná cesta?"
+        throw "V $AppSource neni KArchiveManager.AdminConsole.Api.dll - spatna cesta?"
     }
-    Ok "Zdroj: $AppSource (z repozitáře)"
+    Ok "Zdroj: $AppSource (z repozitare)"
 }
 
 # --------------------------------------------------------- 1) dostupnost SQL
 Step "1) Dostupnost SQL Serveru $SqlServer"
 $tcp = Test-NetConnection -ComputerName $SqlServer -Port 1433 -WarningAction SilentlyContinue
 if (-not $tcp.TcpTestSucceeded) {
-    throw "Na $SqlServer`:1433 se nelze připojit. Ověřte, že SQL Server naslouchá na TCP a že port nezavírá firewall."
+    throw "Na $SqlServer`:1433 se nelze pripojit. Overte, ze SQL Server nasloucha na TCP a ze port nezavira firewall."
 }
-Ok 'TCP 1433 odpovídá'
+Ok 'TCP 1433 odpovida'
 
 $csTest = "Server=$SqlServer;Database=$AdminDb;User ID=$SqlLogin;Password=$SqlPassword;TrustServerCertificate=True;Encrypt=True;Connect Timeout=10;"
 try {
@@ -115,16 +115,16 @@ try {
     $cn.Open()
     $cmd = $cn.CreateCommand()
     $cmd.CommandText = "SELECT SUSER_SNAME() + ' / ' + DB_NAME() + ' / ' + CONVERT(varchar(20), COUNT(*)) + ' procesu' FROM arch.Process"
-    Ok ('Přihlášení prošlo: ' + $cmd.ExecuteScalar())
+    Ok ('Prihlaseni proslo: ' + $cmd.ExecuteScalar())
     $cn.Close()
 }
 catch { throw "SQL login selhal: $($_.Exception.Message)" }
 
 # ------------------------------------------------------------ 2) soubory
-Step '2) Nasazení souborů aplikace'
+Step '2) Nasazeni souboru aplikace'
 if (Test-Path $SitePath) {
     $bak = "$SitePath.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
-    Warn "Cíl existuje — původní obsah odkládám do $bak"
+    Warn "Cil existuje - puvodni obsah odkladam do $bak"
     Move-Item $SitePath $bak
 }
 New-Item -ItemType Directory -Path $SitePath -Force | Out-Null
@@ -133,28 +133,28 @@ if ($PayloadZip) {
     Expand-Archive -Path $PayloadZip -DestinationPath $SitePath -Force
 }
 else {
-    # logs/ je běhový balast předchozí instalace, nekopíruje se
+    # logs/ je behovy balast predchozi instalace, nekopiruje se
     Copy-Item (Join-Path $AppSource '*') $SitePath -Recurse -Force -Exclude 'logs'
     if (Test-Path (Join-Path $SitePath 'logs')) { Remove-Item (Join-Path $SitePath 'logs') -Recurse -Force }
 }
 $n = (Get-ChildItem $SitePath -Recurse -File).Count
-Ok "souborů: $n"
+Ok "souboru: $n"
 
-# Nativní ovladač SqlClientu: NuGet ho ukládá do runtimes\win-x64\native\, odkud
-# si ho ASP.NET Core u framework-dependent nasazení sám nenajde. Bez kopie do
-# kořene konzole nenaváže spojení — to je vada č. 1 z ADMIN-CONSOLE.md.
+# Nativni ovladac SqlClientu: NuGet ho uklada do runtimes\win-x64\native\, odkud
+# si ho ASP.NET Core u framework-dependent nasazeni sam nenajde. Bez kopie do
+# korene konzole nenavaze spojeni - to je vada c. 1 z ADMIN-CONSOLE.md.
 $sniRoot = Join-Path $SitePath 'Microsoft.Data.SqlClient.SNI.dll'
 if (-not (Test-Path $sniRoot)) {
     $sniSrc = Join-Path $SitePath 'runtimes\win-x64\native\Microsoft.Data.SqlClient.SNI.dll'
     if (Test-Path $sniSrc) {
         Copy-Item $sniSrc $sniRoot -Force
-        Ok 'nativní ovladač SqlClientu zkopírován do kořene'
+        Ok 'nativni ovladac SqlClientu zkopirovan do korene'
     }
     else {
-        Warn 'Microsoft.Data.SqlClient.SNI.dll nenalezen — konzole se nemusí připojit.'
+        Warn 'Microsoft.Data.SqlClient.SNI.dll nenalezen - konzole se nemusi pripojit.'
     }
 }
-else { Ok 'nativní ovladač SqlClientu je v kořeni' }
+else { Ok 'nativni ovladac SqlClientu je v koreni' }
 
 # ------------------------------------------------------- 3) appsettings.json
 Step '3) Konfigurace'
@@ -162,21 +162,21 @@ $appsettings = Join-Path $SitePath 'appsettings.json'
 $cfg = Get-Content $appsettings -Raw | ConvertFrom-Json
 
 if ($UseEnvVar) {
-    # Heslo zůstane mimo soubor na disku; předá ho proměnná prostředí fondu.
+    # Heslo zustane mimo soubor na disku; preda ho promenna prostredi fondu.
     $cfg.ConnectionStrings.ArchiveManagerAdmin = ''
-    Ok 'Connection string v souboru ponechán prázdný (heslo ponese proměnná fondu)'
+    Ok 'Connection string v souboru ponechan prazdny (heslo ponese promenna fondu)'
 }
 else {
     $cfg.ConnectionStrings.ArchiveManagerAdmin =
         "Server=$SqlServer;Database=$AdminDb;User ID=$SqlLogin;Password=$SqlPassword;TrustServerCertificate=True;Encrypt=True;"
-    Warn 'Heslo je zapsané v appsettings.json. Zvažte -UseEnvVar.'
+    Warn 'Heslo je zapsane v appsettings.json. Zvazte -UseEnvVar.'
 }
 $cfg.AdminConsole.WindowsAuthEnabled = $false
 $cfg | ConvertTo-Json -Depth 10 | Set-Content $appsettings -Encoding UTF8
-Ok 'appsettings.json zapsán'
+Ok 'appsettings.json zapsan'
 
 # ------------------------------------------------------------- 4) IIS
-Step '4) IIS: aplikační fond a web'
+Step '4) IIS: aplikacni fond a web'
 if (-not (Test-Path "IIS:\AppPools\$AppPoolName")) { New-WebAppPool -Name $AppPoolName | Out-Null }
 Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name managedRuntimeVersion -Value ''          # No Managed Code
 Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name startMode              -Value 'AlwaysRunning'
@@ -192,14 +192,14 @@ if ($UseEnvVar) {
     Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' `
         -Filter "system.applicationHost/applicationPools/add[@name='$AppPoolName']/environmentVariables" `
         -Name '.' -Value @{name='ConnectionStrings__ArchiveManagerAdmin'; value=$cs}
-    Ok 'Connection string uložen do proměnné prostředí fondu'
+    Ok 'Connection string ulozen do promenne prostredi fondu'
 }
 
 if (Get-Website -Name $SiteName -ErrorAction SilentlyContinue) { Remove-Website -Name $SiteName }
 New-Website -Name $SiteName -Port $Port -PhysicalPath $SitePath -ApplicationPool $AppPoolName | Out-Null
 Ok "web '$SiteName' na portu $Port"
 
-# ACL: fond potřebuje číst obsah a zapisovat logy
+# ACL: fond potrebuje cist obsah a zapisovat logy
 $id = "IIS AppPool\$AppPoolName"
 $acl = Get-Acl $SitePath
 $acl.SetAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
@@ -210,8 +210,8 @@ Ok "ACL pro $id"
 Restart-WebAppPool -Name $AppPoolName
 Start-Sleep -Seconds 3
 
-# ------------------------------------------------------------- 5) ověření
-Step '5) Ověření'
+# ------------------------------------------------------------- 5) overeni
+Step '5) Overeni'
 $base = "http://localhost:$Port"
 $fail = $false
 foreach ($u in @('/health', '/api/readiness')) {
@@ -226,13 +226,13 @@ foreach ($u in @('/health', '/api/readiness')) {
 
 Write-Host ''
 if ($fail) {
-    Write-Host 'Některé ověření neprošlo. Nejčastější příčiny:' -ForegroundColor Yellow
-    Write-Host '  * chybí .NET 10 Hosting Bundle (aplikace cílí na net10.0, ne 8/9) -> doinstalovat a iisreset'
-    Write-Host '  * firewall na SQL serveru zavírá 1433'
-    Write-Host '  * login karch_console nemá práva -> spustit sql/61_console_principal_sql_login.sql'
+    Write-Host 'Nektere overeni neproslo. Nejcastejsi priciny:' -ForegroundColor Yellow
+    Write-Host '  * chybi .NET 10 Hosting Bundle (aplikace cili na net10.0, ne 8/9) -> doinstalovat a iisreset'
+    Write-Host '  * firewall na SQL serveru zavira 1433'
+    Write-Host '  * login karch_console nema prava -> spustit sql/61_console_principal_sql_login.sql'
     Write-Host "  * podrobnosti: Event Viewer -> Application, zdroj 'IIS AspNetCore Module V2'"
 }
 else {
-    Write-Host "Hotovo. Konzole běží na $base" -ForegroundColor Green
-    Write-Host "Ze sítě: http://$env:COMPUTERNAME`:$Port  (pokud port pustí firewall)"
+    Write-Host "Hotovo. Konzole bezi na $base" -ForegroundColor Green
+    Write-Host "Ze site: http://$env:COMPUTERNAME`:$Port  (pokud port pusti firewall)"
 }
