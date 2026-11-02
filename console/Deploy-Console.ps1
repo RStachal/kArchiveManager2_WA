@@ -122,8 +122,8 @@ if (-not (Test-IisInstalled)) {
     if (-not $InstallIis) {
         throw @'
 Role IIS neni nainstalovana. Spustte znovu s -InstallIis, nebo ji doinstalujte rucne:
-  Windows Server:  Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console -IncludeManagementTools
-  Windows 10/11:   Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-WebServerRole, IIS-WebServer, IIS-ManagementConsole
+  Windows Server:  Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console, Web-Scripting-Tools -IncludeManagementTools
+  Windows 10/11:   Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-WebServerRole, IIS-WebServer, IIS-ManagementConsole, IIS-ManagementScriptingTools
 Po instalaci muze byt nutny restart.
 '@
     }
@@ -131,19 +131,26 @@ Po instalaci muze byt nutny restart.
     # Serverove a klientske Windows to delaji jinak
     if ((Get-CimInstance Win32_OperatingSystem).ProductType -eq 1) {
         Enable-WindowsOptionalFeature -Online -All -NoRestart `
-            -FeatureName IIS-WebServerRole, IIS-WebServer, IIS-ManagementConsole | Out-Null
+            -FeatureName IIS-WebServerRole, IIS-WebServer, IIS-ManagementConsole, IIS-ManagementScriptingTools | Out-Null
     }
     else {
-        Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console -IncludeManagementTools | Out-Null
+        Install-WindowsFeature -Name Web-Server, Web-Mgmt-Console, Web-Scripting-Tools -IncludeManagementTools | Out-Null
     }
     if (-not (Test-IisUsable)) {
         throw @'
-Role IIS se nainstalovala, ale jeste ji nelze ridit z PowerShellu - COM
-komponenty IIS se registruji az po restartu (jinak provider pada na
-REGDB_E_CLASSNOTREG / "Trida neni zaregistrovana").
+Role IIS se nainstalovala, ale provider WebAdministration porad nefunguje
+(REGDB_E_CLASSNOTREG / "Trida neni zaregistrovana").
 
-RESTARTUJTE STROJ a spustte skript znovu. Podruhe uz roli instalovat nebude
-a pokracuje dal.
+Modul WebAdministration potrebuje soucast IIS Management Scripting Tools -
+sama role webserveru nestaci. Doinstalujte ji a spustte skript znovu:
+
+  Windows 10/11:
+    Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-ManagementScriptingTools
+  Windows Server:
+    Install-WindowsFeature -Name Web-Scripting-Tools
+
+Pokud uz nainstalovana je, restartujte stroj - COM komponenty se registruji
+az po restartu.
 '@
     }
     Ok 'role IIS nainstalovana a funkcni'
@@ -151,8 +158,17 @@ a pokracuje dal.
 if (-not (Test-IisUsable)) {
     throw @'
 IIS je nainstalovany, ale provider WebAdministration nefunguje
-(REGDB_E_CLASSNOTREG). Nejcasteji to znamena, ze se role instalovala a stroj
-od te doby nebyl restartovan. Restartujte stroj a spustte skript znovu.
+(REGDB_E_CLASSNOTREG / "Trida neni zaregistrovana").
+
+Nejcasteji chybi soucast IIS Management Scripting Tools - sama role webserveru
+ji neprinasi. Doinstalujte ji:
+
+  Windows 10/11:
+    Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-ManagementScriptingTools
+  Windows Server:
+    Install-WindowsFeature -Name Web-Scripting-Tools
+
+Potom spustte skript znovu; pokud chyba trva, restartujte stroj.
 '@
 }
 Import-Module WebAdministration
