@@ -124,7 +124,8 @@ New-Item -ItemType Directory -Path $co -Force | Out-Null
 
 foreach ($p in @('console\Deploy-Console.ps1',
                  'console\Start-Console-Standalone.ps1',
-                 'console\Test-ConsoleConnection.ps1')) {
+                 'console\Test-ConsoleConnection.ps1',
+                 'console\Diagnose-Iis.ps1')) {
     Add-Item2 $p $co -As (Split-Path $p -Leaf)
 }
 # aplikace jde do .\app, kde si ji skripty najdou samy
@@ -251,7 +252,8 @@ Test-Zip -Zip $dbZip -Musi @(
     'kAM2/01-database/operational-add-ons/064_console_default_operator.sql')
 
 Test-Zip -Zip $coZip -Musi @(
-    'Deploy-Console.ps1', 'Start-Console-Standalone.ps1', 'Test-ConsoleConnection.ps1', 'Uninstall-kAM2.ps1',
+    'Deploy-Console.ps1', 'Start-Console-Standalone.ps1', 'Test-ConsoleConnection.ps1',
+    'Diagnose-Iis.ps1', 'Uninstall-kAM2.ps1',
     'SPUSTENI.txt',
     'app/KArchiveManager.AdminConsole.Api.dll',
     'app/appsettings.json',
