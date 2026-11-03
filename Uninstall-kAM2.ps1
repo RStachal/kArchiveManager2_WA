@@ -42,6 +42,7 @@ param(
 
     [string] $Server      = 'localhost',
     [string] $SourceDb,
+    [string[]] $AdditionalSourceDbs = @(),
     [string] $AdminDb     = 'kArchiveManagerAdmin',
     [string] $ArchiveDb   = 'kArchiveManagerBackups',
     [string[]] $Logins    = @('karch_runtime_svc', 'karch_console'),
@@ -57,6 +58,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Pri spusteni pres "powershell -File" prijde pole jako jediny retezec.
+$AdditionalSourceDbs = @($AdditionalSourceDbs | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 function Nadpis($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
 function Zmena($t)  { if ($Apply) { Write-Host "   SMAZANO  $t" -ForegroundColor Green } else { Write-Host "   smazal by: $t" -ForegroundColor Yellow } }
 function Info($t)   { Write-Host "   -        $t" -ForegroundColor DarkGray }
@@ -170,9 +174,10 @@ if ($Part -in @('Database', 'Both')) {
 
     # Tohle je to, co se pri rucnim uklidu prehlizi: uzivatele a role zustavaji
     # UVNITR zdrojove databaze WMS i po smazani databazi produktu.
-    if ($SourceDb) {
-        Nadpis "Stopy ve zdrojove databazi $SourceDb"
-        $zbytky = Sql -Db $SourceDb -Query @"
+    foreach ($db in @($SourceDb) + $AdditionalSourceDbs) {
+        if (-not $db) { continue }
+        Nadpis "Stopy ve zdrojove databazi $db"
+        $zbytky = Sql -Db $db -Query @"
 SET NOCOUNT ON;
 SELECT CONVERT(varchar(10), CASE WHEN type = 'R' THEN 'role' ELSE 'uzivatel' END) + '|' + CONVERT(varchar(30), name)
 FROM sys.database_principals
@@ -182,11 +187,11 @@ ORDER BY CASE WHEN type = 'R' THEN 2 ELSE 1 END, name;
         if ($zbytky) {
             foreach ($z in $zbytky) {
                 $cast = $z.Trim() -split '\|'
-                Zmena "$SourceDb`: $($cast[0]) $($cast[1])"
+                Zmena "$db`: $($cast[0]) $($cast[1])"
             }
             if ($Apply) {
                 # uzivatele napred, role az po nich (role nejde smazat s cleny)
-                $null = Sql -Db $SourceDb -Query @"
+                $null = Sql -Db $db -Query @"
 DECLARE @sql nvarchar(max) = N'';
 SELECT @sql += N'DROP USER ' + QUOTENAME(name) + N';'
   FROM sys.database_principals WHERE name LIKE 'karch%' AND type IN ('S','U','E','X');
@@ -196,19 +201,19 @@ IF @sql <> N'' EXEC sys.sp_executesql @sql;
 "@
             }
         }
-        else { Info "ve zdrojove databazi $SourceDb nic nezbylo" }
+        else { Info "ve zdrojove databazi $db nic nezbylo" }
 
         if ($RestoreCompatLevel -gt 0) {
-            $nyni = ("$(Sql -Query "SET NOCOUNT ON; SELECT CONVERT(varchar(5), compatibility_level) FROM sys.databases WHERE name = N'$SourceDb';")").Trim()
+            $nyni = ("$(Sql -Query "SET NOCOUNT ON; SELECT CONVERT(varchar(5), compatibility_level) FROM sys.databases WHERE name = N'$db';")").Trim()
             if ($nyni -ne "$RestoreCompatLevel") {
-                Zmena "$SourceDb`: compatibility level $nyni -> $RestoreCompatLevel"
-                if ($Apply) { $null = Sql -Query "ALTER DATABASE [$SourceDb] SET COMPATIBILITY_LEVEL = $RestoreCompatLevel;" }
+                Zmena "$db`: compatibility level $nyni -> $RestoreCompatLevel"
+                if ($Apply) { $null = Sql -Query "ALTER DATABASE [$db] SET COMPATIBILITY_LEVEL = $RestoreCompatLevel;" }
             }
-            else { Info "$SourceDb uz je na compatibility level $RestoreCompatLevel" }
+            else { Info "$db uz je na compatibility level $RestoreCompatLevel" }
         }
         else { Info 'compatibility level se nemeni (pouzijte -RestoreCompatLevel)' }
     }
-    else { Warn 'bez -SourceDb nelze uklidit stopy ve zdrojove databazi WMS' }
+    if (-not $SourceDb) { Warn 'bez -SourceDb nelze uklidit stopy ve zdrojove databazi WMS' }
 
     Nadpis 'msdb'
     $mu = Sql -Db msdb -Query "SET NOCOUNT ON; SELECT CONVERT(varchar(40), name) FROM sys.database_principals WHERE name LIKE 'karch%' AND type IN ('S','U','E','X');"
