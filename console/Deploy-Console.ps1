@@ -94,6 +94,123 @@ function Test-IisUsable {
     catch { return $false }
 }
 
+# ============================================================================
+# Prace s IIS: provider WebAdministration, nebo appcmd.exe
+# ----------------------------------------------------------------------------
+# Provider umi selhat na REGDB_E_CLASSNOTREG, i kdyz IIS sam funguje bezvadne.
+# Zmereno na Windows 11 build 26300: vsechny soucasti IIS zapnute vcetne
+# IIS-ManagementScriptingTools, sluzby W3SVC i WAS bezi, "appcmd list site"
+# vraci 0 a vidi Default Web Site, Import-Module WebAdministration projde - a
+# presto Get-Website pada. Chybi registrace COM tridy
+# Microsoft.AppHostQueryProcessor z AppHostNavigators.dll.
+#
+# appcmd.exe umi vse, co tu potrebujeme, a na te COM tride nezavisi. Skript
+# proto pouzije provider, kdyz funguje, a jinak prepne na appcmd.
+# ============================================================================
+$script:Appcmd  = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
+$script:IisMode = 'provider'
+
+function Invoke-Appcmd {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]] $Argumenty)
+    $out = & $script:Appcmd @Argumenty 2>&1
+    return [pscustomobject]@{ Kod = $LASTEXITCODE; Vystup = ($out -join "`n") }
+}
+
+function Test-AppcmdUsable {
+    if (-not (Test-Path $script:Appcmd)) { return $false }
+    return ((Invoke-Appcmd 'list' 'site').Kod -eq 0)
+}
+
+function New-AppPoolX {
+    param([string] $Name)
+    if ($script:IisMode -eq 'provider') {
+        if (-not (Test-Path "IIS:\AppPools\$Name")) { New-WebAppPool -Name $Name | Out-Null }
+        Set-ItemProperty "IIS:\AppPools\$Name" -Name managedRuntimeVersion     -Value ''
+        Set-ItemProperty "IIS:\AppPools\$Name" -Name startMode                 -Value 'AlwaysRunning'
+        Set-ItemProperty "IIS:\AppPools\$Name" -Name processModel.identityType -Value 'ApplicationPoolIdentity'
+        Set-ItemProperty "IIS:\AppPools\$Name" -Name processModel.idleTimeout  -Value '00:00:00'
+        return
+    }
+    if ((Invoke-Appcmd 'list' 'apppool' $Name).Kod -ne 0) {
+        $r = Invoke-Appcmd 'add' 'apppool' "/name:$Name"
+        if ($r.Kod -ne 0) { throw "appcmd add apppool selhalo:`n$($r.Vystup)" }
+    }
+    foreach ($nast in @('/managedRuntimeVersion:',
+                        '/startMode:AlwaysRunning',
+                        '/processModel.identityType:ApplicationPoolIdentity',
+                        '/processModel.idleTimeout:00:00:00')) {
+        $r = Invoke-Appcmd 'set' 'apppool' "/apppool.name:$Name" $nast
+        if ($r.Kod -ne 0) { throw "appcmd set apppool $nast selhalo:`n$($r.Vystup)" }
+    }
+}
+
+function Set-AppPoolEnvX {
+    param([string] $Name, [string] $Key, [string] $Value)
+    if ($script:IisMode -eq 'provider') {
+        Remove-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' `
+            -Filter "system.applicationHost/applicationPools/add[@name='$Name']/environmentVariables" `
+            -Name '.' -AtElement @{name = $Key } -ErrorAction SilentlyContinue
+        Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' `
+            -Filter "system.applicationHost/applicationPools/add[@name='$Name']/environmentVariables" `
+            -Name '.' -Value @{name = $Key; value = $Value }
+        return
+    }
+    $sekce = 'system.applicationHost/applicationPools'
+    # napred odebrat, aby se pri opakovanem spusteni nezdvojila
+    $null = Invoke-Appcmd 'set' 'config' "-section:$sekce" "/-[name='$Name'].environmentVariables.[name='$Key']" '/commit:apphost'
+    $r = Invoke-Appcmd 'set' 'config' "-section:$sekce" "/+[name='$Name'].environmentVariables.[name='$Key',value='$Value']" '/commit:apphost'
+    if ($r.Kod -ne 0) { throw "appcmd nastaveni promenne prostredi selhalo:`n$($r.Vystup)" }
+}
+
+function Remove-SiteX {
+    param([string] $Name)
+    if ($script:IisMode -eq 'provider') {
+        if (Get-Website -Name $Name -ErrorAction SilentlyContinue) { Remove-Website -Name $Name }
+        return
+    }
+    if ((Invoke-Appcmd 'list' 'site' $Name).Kod -eq 0) { $null = Invoke-Appcmd 'delete' 'site' $Name }
+}
+
+function New-SiteX {
+    param([string] $Name, [int] $Port, [string] $Path, [string] $Pool)
+    if ($script:IisMode -eq 'provider') {
+        New-Website -Name $Name -Port $Port -PhysicalPath $Path -ApplicationPool $Pool | Out-Null
+        return
+    }
+    $r = Invoke-Appcmd 'add' 'site' "/name:$Name" "/bindings:http/*:${Port}:" "/physicalPath:$Path"
+    if ($r.Kod -ne 0) { throw "appcmd add site selhalo:`n$($r.Vystup)" }
+    $r = Invoke-Appcmd 'set' 'app' "$Name/" "/applicationPool:$Pool"
+    if ($r.Kod -ne 0) { throw "appcmd prirazeni fondu selhalo:`n$($r.Vystup)" }
+}
+
+function Restart-AppPoolX {
+    param([string] $Name)
+    if ($script:IisMode -eq 'provider') { Restart-WebAppPool -Name $Name; return }
+    $null = Invoke-Appcmd 'stop' 'apppool' "/apppool.name:$Name"
+    Start-Sleep -Seconds 2
+    $null = Invoke-Appcmd 'start' 'apppool' "/apppool.name:$Name"
+}
+
+function Stop-SiteAndPoolX {
+    param([string] $Site, [string] $Pool)
+    if ($script:IisMode -eq 'provider') {
+        if (Get-Website -Name $Site -ErrorAction SilentlyContinue) { Stop-Website -Name $Site -ErrorAction SilentlyContinue }
+        if (Test-Path "IIS:\AppPools\$Pool") { Stop-WebAppPool -Name $Pool -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+        return
+    }
+    $null = Invoke-Appcmd 'stop' 'site' "/site.name:$Site"
+    $null = Invoke-Appcmd 'stop' 'apppool' "/apppool.name:$Pool"
+    Start-Sleep -Seconds 2
+}
+
+function Test-AncmX {
+    if ($script:IisMode -eq 'provider') {
+        return [bool](Get-WebGlobalModule -Name 'AspNetCoreModuleV2' -ErrorAction SilentlyContinue)
+    }
+    $r = Invoke-Appcmd 'list' 'config' '/section:system.webServer/globalModules'
+    return ($r.Kod -eq 0 -and $r.Vystup -match 'AspNetCoreModuleV2')
+}
+
 # Heslo radeji dotazem nez parametrem: v prikazove radce by zustalo v historii
 # PowerShellu, a pri vkladani navodu se snadno zkomoli (zastupne <zavorky> navic
 # PowerShell cte jako presmerovani a prikaz se vubec nespusti).
@@ -155,28 +272,34 @@ az po restartu.
     }
     Ok 'role IIS nainstalovana a funkcni'
 }
-if (-not (Test-IisUsable)) {
+# Provider, nebo appcmd - podle toho, co na tomto stroji funguje.
+if (Test-IisUsable) {
+    $script:IisMode = 'provider'
+    Import-Module WebAdministration
+    Ok 'rizeni IIS: provider WebAdministration'
+}
+elseif (Test-AppcmdUsable) {
+    $script:IisMode = 'appcmd'
+    Warn 'provider WebAdministration nefunguje (REGDB_E_CLASSNOTREG) - prepinam na appcmd.exe'
+    Warn 'IIS sam je v poradku, chybi jen registrace COM tridy pro PowerShell.'
+    Warn 'Opravit lze takto (jako spravce):  regsvr32 /s %windir%\System32\inetsrv\AppHostNavigators.dll'
+    Ok 'rizeni IIS: appcmd.exe'
+}
+else {
     throw @'
-IIS je nainstalovany, ale provider WebAdministration nefunguje
-(REGDB_E_CLASSNOTREG / "Trida neni zaregistrovana").
+IIS nelze ridit ani pres provider WebAdministration, ani pres appcmd.exe.
 
-Nejcasteji chybi soucast IIS Management Scripting Tools - sama role webserveru
-ji neprinasi. Doinstalujte ji:
+Overte, ze je nainstalovana role IIS vcetne soucasti pro skriptovani:
+  Windows 10/11:   Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-ManagementScriptingTools
+  Windows Server:  Install-WindowsFeature -Name Web-Scripting-Tools
 
-  Windows 10/11:
-    Enable-WindowsOptionalFeature -Online -All -FeatureName IIS-ManagementScriptingTools
-  Windows Server:
-    Install-WindowsFeature -Name Web-Scripting-Tools
-
-Potom spustte skript znovu; pokud chyba trva, restartujte stroj.
+Podrobnou diagnostiku da console\Diagnose-Iis.ps1.
 '@
 }
-Import-Module WebAdministration
-Ok 'modul WebAdministration'
 
 # Aplikace cili na net10.0. Runtime 8 ani 9 nestaci, prestoze to dodavany
 # handover README tvrdi. AspNetCoreModuleV2 je jediny spolehlivy ukazatel.
-if (-not (Get-WebGlobalModule -Name 'AspNetCoreModuleV2' -ErrorAction SilentlyContinue)) {
+if (-not (Test-AncmX)) {
     throw @'
 Chybi AspNetCoreModuleV2 - neni nainstalovany ASP.NET Core Hosting Bundle.
 Aplikace cili na net10.0, takze je potreba .NET 10 HOSTING BUNDLE (ne jen runtime):
@@ -216,8 +339,7 @@ if (-not (Test-Path $dll)) { throw "Chybi aplikace: $dll`nSpoustite skript z klo
 if (Test-Path $SitePath) {
     $bak = "$SitePath.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
     Warn "cil existuje - odkladam do $bak"
-    if (Get-Website -Name $SiteName -ErrorAction SilentlyContinue) { Stop-Website -Name $SiteName -ErrorAction SilentlyContinue }
-    if (Test-Path "IIS:\AppPools\$AppPoolName") { Stop-WebAppPool -Name $AppPoolName -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
+    Stop-SiteAndPoolX -Site $SiteName -Pool $AppPoolName
     Move-Item $SitePath $bak
 }
 New-Item -ItemType Directory -Path $SitePath -Force | Out-Null
@@ -249,25 +371,16 @@ Ok 'appsettings.json'
 
 # --------------------------------------------------------------- 6) IIS
 Nadpis 'Aplikacni fond a web'
-if (-not (Test-Path "IIS:\AppPools\$AppPoolName")) { New-WebAppPool -Name $AppPoolName | Out-Null }
-Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name managedRuntimeVersion       -Value ''              # No Managed Code
-Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name startMode                   -Value 'AlwaysRunning'
-Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.identityType   -Value 'ApplicationPoolIdentity'
-Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name processModel.idleTimeout    -Value '00:00:00'
+New-AppPoolX -Name $AppPoolName
 Ok "fond '$AppPoolName' (No Managed Code, AlwaysRunning)"
 
 if ($AuthMode -eq 'SqlLogin') {
-    Remove-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' `
-        -Filter "system.applicationHost/applicationPools/add[@name='$AppPoolName']/environmentVariables" `
-        -Name '.' -AtElement @{name = 'ConnectionStrings__ArchiveManagerAdmin' } -ErrorAction SilentlyContinue
-    Add-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' `
-        -Filter "system.applicationHost/applicationPools/add[@name='$AppPoolName']/environmentVariables" `
-        -Name '.' -Value @{name = 'ConnectionStrings__ArchiveManagerAdmin'; value = $cs }
+    Set-AppPoolEnvX -Name $AppPoolName -Key 'ConnectionStrings__ArchiveManagerAdmin' -Value $cs
     Ok 'connection string v promenne prostredi fondu (heslo neni na disku)'
 }
 
-if (Get-Website -Name $SiteName -ErrorAction SilentlyContinue) { Remove-Website -Name $SiteName }
-New-Website -Name $SiteName -Port $Port -PhysicalPath $SitePath -ApplicationPool $AppPoolName | Out-Null
+Remove-SiteX -Name $SiteName
+New-SiteX -Name $SiteName -Port $Port -Path $SitePath -Pool $AppPoolName
 Ok "web '$SiteName' na portu $Port"
 
 $identita = "IIS AppPool\$AppPoolName"
@@ -335,7 +448,7 @@ PRINT 'prava pridelena';
 
 # ------------------------------------------------------------- 8) overeni
 Nadpis 'Overeni'
-Restart-WebAppPool -Name $AppPoolName
+Restart-AppPoolX -Name $AppPoolName
 Start-Sleep -Seconds 4
 
 $base = "http://localhost:$Port"
