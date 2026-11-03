@@ -38,6 +38,7 @@
 param(
     [Parameter(Mandatory = $true)] [string] $Server,
     [Parameter(Mandatory = $true)] [string] $SourceDb,
+    [string[]] $AdditionalSourceDbs = @(),
     [string] $AdminDb       = 'kArchiveManagerAdmin',
     [string] $ArchiveDb     = 'kArchiveManagerBackups',
     [int]    $RetentionDays = 450,          # 15 mesicu
@@ -218,12 +219,51 @@ IF NOT EXISTS (SELECT 1 FROM arch.RunProfile WHERE RunProfileCode = N'DRY')
 "@
 Ok 'JOB_DEFAULT (ostry, okno 55 min) a DRY (nanecisto)'
 
+# ----------------------------------------------- 6b) cheap-mode pro log
+# Validace to sama doporucuje: odstrani AT TIME ZONE z kandidatniho scanu, coz
+# je u produkcnich objemu logu (stovky milionu radku) dominantni naklad.
+# Driv se to zapinalo rucne a pri kazdem cistem nasazeni se to ztratilo.
+Nadpis 'Cheap-mode pro systemovy log'
+$null = Sql -Db $AdminDb -Query "EXEC arch.usp_Api_ApplyConfigFix @ActionKey=N'ENABLE_CHEAP_MODE', @ProcessCode=N'RF_LOG2', @SourceDb=N'$SourceDb';"
+Ok "$SourceDb - cheap-mode zapnut"
+
+# ------------------------------------------- 6c) dalsi zdrojova prostredi
+# Plany jsou na zdrojove databazi nezavisle, takze dalsi prostredi znamena jen
+# radky v arch.ProcessDatabase. Prepisy zustavaji NULL, takze plati tataz
+# pravidla; archivni schema vznikne pod nazvem zdrojove databaze, cimz se CZ a
+# SK oddeli v teze archivni databazi.
+if ($AdditionalSourceDbs.Count -gt 0) {
+    Nadpis 'Dalsi zdrojova prostredi'
+    $poradi = 2000
+    foreach ($db in $AdditionalSourceDbs) {
+        $compatDb = ("$(Sql -Query "SET NOCOUNT ON; SELECT CONVERT(varchar(5), compatibility_level) FROM sys.databases WHERE name = N'$db';")").Trim()
+        if (-not $compatDb) { throw "Zdrojova databaze $db neexistuje." }
+        if ([int]$compatDb -lt 130) {
+            if (-not $RaiseCompatLevel) { throw "$db je na compatibility level $compatDb; konfigurace logu vyzaduje 130. Spustte s -RaiseCompatLevel." }
+            $null = Sql -Query "ALTER DATABASE [$db] SET COMPATIBILITY_LEVEL = 130;"
+            Warn "$db - compatibility level $compatDb na 130"
+        }
+        $cfg2 = NewTempSql -Source (Join-Path $sqlDir '62_add_source_database.sql') -Replace @{
+            "DECLARE @SourceDb   sysname = N'KMWESK';" = "DECLARE @SourceDb   sysname = N'$db';"
+            'DECLARE @RunOrderBase int   = 2000;'      = "DECLARE @RunOrderBase int   = $poradi;"
+        }
+        $null = SqlFile -Path $cfg2 -Db $AdminDb
+        Remove-Item $cfg2 -Force
+        foreach ($p in @('RECEIVING', 'SHIPPING', 'RF_LOG2')) {
+            $null = Sql -Db $AdminDb -Query "EXEC arch.usp_ProvisionArchiveTablesForProcess @ProcessCode=N'$p', @SourceDb=N'$db', @ArchiveDb=N'$ArchiveDb';"
+        }
+        $null = Sql -Db $AdminDb -Query "EXEC arch.usp_Api_ApplyConfigFix @ActionKey=N'ENABLE_CHEAP_MODE', @ProcessCode=N'RF_LOG2', @SourceDb=N'$db';"
+        Ok "$db - plany namapovany, archivni schema zalozeno, cheap-mode zapnut"
+        $poradi += 1000
+    }
+}
+
 # ------------------------------------------------------------ 7) behovy ucet
 Nadpis 'Behovy ucet jobu'
 $hesla[$RunnerLogin] = NewPassword
 $r = NewTempSql -Source (Join-Path $addOns '053_runtime_least_privilege_principal.sql') -Replace @{
     "N'<<SET-A-STRONG-PASSWORD>>'"       = "N'$($hesla[$RunnerLogin])'"
-    "N'KMWEBV,Edge,KMWE_Test,AAD'"       = "N'$SourceDb'"
+    "N'KMWEBV,Edge,KMWE_Test,AAD'"       = "N'$((@($SourceDb) + $AdditionalSourceDbs) -join ',')'"
     '@Apply               bit           = 0'  = '@Apply               bit           = 1'
 }
 $null = SqlFile -Path $r -Db $AdminDb
