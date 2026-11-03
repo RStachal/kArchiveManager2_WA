@@ -50,7 +50,7 @@ param(
     [switch] $RaiseCompatLevel,
     [switch] $Clean,
     [switch] $IConfirm,
-    [string] $RepoRoot      = $PSScriptRoot
+    [string] $RepoRoot      = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,6 +116,22 @@ function NewPassword {
     $b = [byte[]]::new(24); $rng.GetBytes($b)
     (-join ($b[0..20] | ForEach-Object { $ok[$_ % $ok.Length] })) +
     (-join ($b[21..23] | ForEach-Object { $sp[$_ % $sp.Length] }))
+}
+
+# Kde balicek lezi. Nelze to dat jako vychozi hodnotu do param(): pri spusteni
+# pres "powershell -File .\Deploy-Database.ps1" je $PSScriptRoot v dobe
+# vyhodnocovani param() prazdny a skript spadl na "Cannot bind argument to
+# parameter 'Path' because it is an empty string" jeste pred prvnim krokem.
+# V tele skriptu uz naplneny je; $MyInvocation je zaloha pro ostatni zpusoby.
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+        $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+    }
+    if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = (Get-Location).Path }
+}
+if (-not (Test-Path (Join-Path $RepoRoot 'sql'))) {
+    throw "V $RepoRoot neni slozka sql. Spoustejte skript ze slozky, kam jste balicek rozbalili, nebo predejte -RepoRoot."
 }
 
 $sqlDir  = Join-Path $RepoRoot 'sql'
