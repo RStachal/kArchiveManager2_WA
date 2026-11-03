@@ -49,6 +49,7 @@ param(
     [string] $AppPoolName = 'kAM Admin Console',
     [string] $SiteName    = 'kAM Admin Console',
     [int]    $Port        = 8089,
+    [string] $HostingBundlePath,
     [switch] $InstallIis
 )
 
@@ -314,6 +315,27 @@ Podrobnou diagnostiku da console\Diagnose-Iis.ps1.
 
 # Aplikace cili na net10.0. Runtime 8 ani 9 nestaci, prestoze to dodavany
 # handover README tvrdi. AspNetCoreModuleV2 je jediny spolehlivy ukazatel.
+# Hosting Bundle: kdyz chybi a mame instalator po ruce, nainstalujeme ho sami.
+# V offline balicku lezi v .\installers\, takze zakaznik nic nestahuje.
+if (-not (Test-AncmX)) {
+    if (-not $HostingBundlePath) {
+        $kandidat = Get-ChildItem (Join-Path $PSScriptRoot 'installers') -Filter 'dotnet-hosting-*-win.exe' -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1
+        if ($kandidat) { $HostingBundlePath = $kandidat.FullName }
+    }
+    if ($HostingBundlePath -and (Test-Path $HostingBundlePath)) {
+        $podpis = Get-AuthenticodeSignature $HostingBundlePath
+        if ($podpis.Status -ne 'Valid') { throw "Instalator $HostingBundlePath nema platny podpis (stav: $($podpis.Status)). Nespoustim ho." }
+        Warn "instaluji .NET Hosting Bundle z $(Split-Path $HostingBundlePath -Leaf) - muze to trvat nekolik minut"
+        $p = Start-Process -FilePath $HostingBundlePath -ArgumentList '/quiet', '/norestart' -Wait -PassThru
+        # 0 = hotovo, 3010 = hotovo, vyzaduje restart
+        if ($p.ExitCode -notin @(0, 3010)) { throw "Instalace Hosting Bundle skoncila kodem $($p.ExitCode)." }
+        if ($p.ExitCode -eq 3010) { Warn 'instalator hlasi, ze je potreba restart' }
+        $null = & iisreset /restart 2>&1
+        Start-Sleep -Seconds 3
+        Ok 'Hosting Bundle nainstalovan'
+    }
+}
 if (-not (Test-AncmX)) {
     throw @'
 Chybi AspNetCoreModuleV2 - neni nainstalovany ASP.NET Core Hosting Bundle.

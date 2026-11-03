@@ -43,3 +43,6 @@ desktop.ini
 
 # balicek konzole - vyraben z bezici instalace, neverzuje se
 /console/AdminConsole-payload.zip
+
+# offline balicky - konzolovy ma 116 MB, nad limit GitHubu; sestavuje Build-OfflinePackages.ps1
+/dist-offline/
