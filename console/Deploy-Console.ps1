@@ -203,12 +203,27 @@ function Stop-SiteAndPoolX {
     Start-Sleep -Seconds 2
 }
 
+# Pritomnost modulu ASP.NET Core. Pozor: "appcmd list config /section:
+# system.webServer/globalModules" je nespolehlive - bez dostatecnych opravneni
+# vrati chybu o redirection.config a tvari se, ze modul neni, i kdyz je.
+# Overeno na WA01, kde Hosting Bundle nainstalovany JE. Rozhoduje proto
+# existence knihovny, kterou Hosting Bundle uklada; appcmd slouzi jen jako
+# potvrzeni, ze je modul i zaregistrovany.
 function Test-AncmX {
     if ($script:IisMode -eq 'provider') {
         return [bool](Get-WebGlobalModule -Name 'AspNetCoreModuleV2' -ErrorAction SilentlyContinue)
     }
+    $dll = Join-Path ${env:ProgramFiles} 'IIS\Asp.Net Core Module\V2\aspnetcorev2.dll'
+    $jeSoubor = Test-Path $dll
     $r = Invoke-Appcmd 'list' 'config' '/section:system.webServer/globalModules'
-    return ($r.Kod -eq 0 -and $r.Vystup -match 'AspNetCoreModuleV2')
+    $potvrzeno = ($r.Kod -eq 0 -and $r.Vystup -notmatch '^ERROR' -and $r.Vystup -match 'AspNetCoreModuleV2')
+    if ($potvrzeno) { return $true }
+    if ($jeSoubor) {
+        Warn 'AspNetCoreModuleV2: knihovna je na miste, ale registraci v IIS se nepodarilo overit.'
+        Warn 'Pokracuji; kdyby aplikace nenabehla, spustte iisreset.'
+        return $true
+    }
+    return $false
 }
 
 # Heslo radeji dotazem nez parametrem: v prikazove radce by zustalo v historii

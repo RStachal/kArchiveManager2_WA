@@ -55,6 +55,8 @@ Sekce 'Soubory a sluzby'
 foreach ($p in "$env:windir\System32\inetsrv\appcmd.exe",
                "$env:windir\System32\inetsrv\Microsoft.Web.Administration.dll",
                "$env:windir\System32\inetsrv\nativerd.dll",
+               "$env:windir\System32\inetsrv\AppHostNavigators.dll",
+               (Join-Path ${env:ProgramFiles} 'IIS\Asp.Net Core Module\V2\aspnetcorev2.dll'),
                "$env:windir\System32\WindowsPowerShell\v1.0\Modules\WebAdministration\WebAdministration.psd1") {
     Write-Output ("  {0,-6} {1}" -f $(if (Test-Path $p) { 'je' } else { 'CHYBI' }), $p)
 }
