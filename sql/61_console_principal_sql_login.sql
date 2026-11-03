@@ -35,12 +35,24 @@ DECLARE @Login     sysname       = N'karch_console';
 DECLARE @Password  nvarchar(128) = N'<<SET-A-STRONG-PASSWORD>>';
 DECLARE @AdminDb   sysname       = N'kArchiveManagerAdmin';
 DECLARE @ArchiveDb sysname       = N'kArchiveManagerBackups';
-DECLARE @SourceDb  sysname       = N'KMWE';
+DECLARE @SourceDbs nvarchar(4000) = N'KMWE';   -- CSV: KMWE,KMWESK
 DECLARE @Apply     bit           = 0;
 
 IF @Password IS NULL OR @Password = N'<<SET-A-STRONG-PASSWORD>>'
 BEGIN
     RAISERROR('Nastavte @Password. Nic se nezmenilo.', 16, 1);
+    RETURN;
+END;
+
+/* Zdrojovych databazi je vic nez jedna, kdykoli bezi CZ i SK. Dokud tu byl jen
+   jeden nazev, konzole dostala pristup pouze do prvniho prostredi - a kazdy
+   dotaz dashboardu, ktery scita pres vsechna prostredi, pak spadl na chybe 916
+   a uzivatel videl jen "zkontrolujte connection string". */
+IF EXISTS (SELECT 1 FROM STRING_SPLIT(@SourceDbs, N',') s
+           WHERE LTRIM(RTRIM(s.value)) <> N''
+             AND DB_ID(LTRIM(RTRIM(s.value))) IS NULL)
+BEGIN
+    RAISERROR('V @SourceDbs je nazev databaze, ktera na instanci neexistuje. Nic se nezmenilo.', 16, 1);
     RETURN;
 END;
 
@@ -60,7 +72,7 @@ SET @plan += N'USE ' + QUOTENAME(@AdminDb) + N': uzivatel, role karch_viewer/ope
 SET @plan += N'USE ' + QUOTENAME(@ArchiveDb) + N': uzivatel, db_datareader, GRANT VIEW DATABASE PERFORMANCE STATE' + CHAR(10);
 
 /* ---------- 4) zdrojová DB: jen čtení (odhady a validace) ------------------ */
-SET @plan += N'USE ' + QUOTENAME(@SourceDb) + N': uzivatel, db_datareader, GRANT VIEW DATABASE PERFORMANCE STATE'
+SET @plan += N'zdrojove DB (' + @SourceDbs + N'): uzivatel, db_datareader, GRANT VIEW DATABASE PERFORMANCE STATE'
            + N'  -- POUZE CTENI, zadny DELETE' + CHAR(10);
 
 /* ---------- 5) msdb: čtení pro go-live kontrolu ---------------------------- */
@@ -109,7 +121,10 @@ BEGIN TRY
 
     /* archivní a zdrojová DB: pouze čtení */
     DECLARE @db sysname;
-    DECLARE cd CURSOR LOCAL FAST_FORWARD FOR SELECT @ArchiveDb UNION ALL SELECT @SourceDb;
+    DECLARE cd CURSOR LOCAL FAST_FORWARD FOR
+        SELECT @ArchiveDb
+        UNION ALL
+        SELECT LTRIM(RTRIM(value)) FROM STRING_SPLIT(@SourceDbs, N',') WHERE LTRIM(RTRIM(value)) <> N'';
     OPEN cd; FETCH NEXT FROM cd INTO @db;
     WHILE @@FETCH_STATUS = 0
     BEGIN

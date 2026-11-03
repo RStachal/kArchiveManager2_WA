@@ -134,6 +134,12 @@ if (-not (Test-Path (Join-Path $RepoRoot 'sql'))) {
     throw "V $RepoRoot neni slozka sql. Spoustejte skript ze slozky, kam jste balicek rozbalili, nebo predejte -RepoRoot."
 }
 
+# Pri spusteni pres "powershell -File" prijde -AdditionalSourceDbs KMWESK,KMWEPL
+# jako JEDEN retezec, ne pole. Rozdelime ho proto sami; na bezne volani z konzole
+# to nema vliv.
+$AdditionalSourceDbs = @($AdditionalSourceDbs | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$vsechnyZdroje = @($SourceDb) + $AdditionalSourceDbs
+
 $sqlDir  = Join-Path $RepoRoot 'sql'
 $addOns  = Join-Path $RepoRoot 'kAM2\01-database\operational-add-ons'
 $appDir  = Join-Path $RepoRoot 'kAM2\02-admin-console\app'
@@ -279,7 +285,7 @@ Nadpis 'Behovy ucet jobu'
 $hesla[$RunnerLogin] = NewPassword
 $r = NewTempSql -Source (Join-Path $addOns '053_runtime_least_privilege_principal.sql') -Replace @{
     "N'<<SET-A-STRONG-PASSWORD>>'"       = "N'$($hesla[$RunnerLogin])'"
-    "N'KMWEBV,Edge,KMWE_Test,AAD'"       = "N'$((@($SourceDb) + $AdditionalSourceDbs) -join ',')'"
+    "N'KMWEBV,Edge,KMWE_Test,AAD'"       = "N'$($vsechnyZdroje -join ',')'"
     '@Apply               bit           = 0'  = '@Apply               bit           = 1'
 }
 $null = SqlFile -Path $r -Db $AdminDb
@@ -300,12 +306,12 @@ else {
     $hesla[$ConsoleLogin] = NewPassword
     $c = NewTempSql -Source (Join-Path $sqlDir '61_console_principal_sql_login.sql') -Replace @{
         "DECLARE @Password  nvarchar(128) = N'<<SET-A-STRONG-PASSWORD>>';" = "DECLARE @Password  nvarchar(128) = N'$($hesla[$ConsoleLogin])';"
-        "DECLARE @SourceDb  sysname       = N'KMWE';"                      = "DECLARE @SourceDb  sysname       = N'$SourceDb';"
+        "DECLARE @SourceDbs nvarchar(4000) = N'KMWE';   -- CSV: KMWE,KMWESK" = "DECLARE @SourceDbs nvarchar(4000) = N'$($vsechnyZdroje -join ',')';"
         "DECLARE @Apply     bit           = 0;"                            = "DECLARE @Apply     bit           = 1;"
     }
     $null = SqlFile -Path $c -Db 'master'
     Remove-Item $c -Force
-    Ok "${ConsoleLogin}: pet roli karch_*, cteni v archivu i zdroji, cteni msdb"
+    Ok "${ConsoleLogin}: pet roli karch_*, cteni v archivu a ve vsech zdrojich ($($vsechnyZdroje -join ', ')), cteni msdb"
 }
 
 # ------------------------------------------- 9) operatorske API a operator
@@ -345,21 +351,46 @@ Sql -Db 'msdb' -Query "SET NOCOUNT ON; SELECT CONVERT(varchar(46), j.name) + ' |
 
 # ------------------------------------------------------------ 11) overeni
 Nadpis 'Overeni'
-$v = Sql -Db $AdminDb -Query "SET NOCOUNT ON; EXEC arch.usp_ValidateConfiguration @SourceDb=N'$SourceDb';"
-$chyby = @($v | Where-Object { $_ -match '^ERROR' }).Count
-$varov = @($v | Where-Object { $_ -match '^WARN'  }).Count
-if ($chyby -gt 0) { Warn "validace konfigurace: $chyby chyb, $varov varovani"; $v | Where-Object { $_ -match '^ERROR' } | ForEach-Object { Write-Host "      $_" } }
-else { Ok "validace konfigurace: bez chyb ($varov varovani)" }
+foreach ($db in $vsechnyZdroje) {
+    $v = Sql -Db $AdminDb -Query "SET NOCOUNT ON; EXEC arch.usp_ValidateConfiguration @SourceDb=N'$db';"
+    $chyby = @($v | Where-Object { $_ -match '^ERROR' }).Count
+    $varov = @($v | Where-Object { $_ -match '^WARN'  }).Count
+    if ($chyby -gt 0) { Warn "${db}: validace konfigurace: $chyby chyb, $varov varovani"; $v | Where-Object { $_ -match '^ERROR' } | ForEach-Object { Write-Host "      $_" } }
+    else { Ok "${db}: validace konfigurace bez chyb ($varov varovani)" }
 
-$i = Sql -Db $AdminDb -Query "SET NOCOUNT ON; EXEC arch.usp_ValidateIndexRequirements @SourceDb=N'$SourceDb';"
-$iw = @($i | Where-Object { $_ -match '^WARN' }).Count
-Ok "indexy: $iw nepokrytych pozadavku (jen varovani, zpracovani neblokuji; DDL se nikdy nespousti do WMS)"
+    $i = Sql -Db $AdminDb -Query "SET NOCOUNT ON; EXEC arch.usp_ValidateIndexRequirements @SourceDb=N'$db';"
+    $iw = @($i | Where-Object { $_ -match '^WARN' }).Count
+    Ok "${db}: indexy - $iw nepokrytych pozadavku (jen varovani, zpracovani neblokuji; DDL se nikdy nespousti do WMS)"
 
-foreach ($p in @('RECEIVING', 'SHIPPING', 'RF_LOG2')) {
-    $null = Sql -Db $AdminDb -Query "EXEC arch.usp_VerifyRunnerPrivileges @ProcessCode=N'$p', @SourceDb=N'$SourceDb';"
+    foreach ($p in @('RECEIVING', 'SHIPPING', 'RF_LOG2')) {
+        $null = Sql -Db $AdminDb -Query "EXEC arch.usp_VerifyRunnerPrivileges @ProcessCode=N'$p', @SourceDb=N'$db';"
+    }
+    Ok "${db}: opravneni behoveho uctu overena u vsech tri planu"
 }
-Ok 'opravneni behoveho uctu overena u vsech tri planu'
 
+# Konzole cte pres vsechna prostredi najednou. Kdyz ji chybi uzivatel byt v
+# jednom z nich, dashboard spadne cely na chybe 916 - a aplikace misto toho
+# poradi "zkontrolujte connection string", takze se hleda uplne jinde. Proto
+# se to overuje tady, dokud je kdo opravit.
+if (-not $ConsoleOnSqlServer) {
+    $nedostupne = @()
+    foreach ($db in (@($AdminDb, $ArchiveDb) + $vsechnyZdroje)) {
+        $r = Sql -Db 'master' -Query @"
+SET NOCOUNT ON;
+EXECUTE AS LOGIN = N'$ConsoleLogin';
+BEGIN TRY
+    DECLARE @n int;
+    SELECT @n = COUNT(*) FROM [$db].sys.tables;
+    PRINT 'OK';
+END TRY
+BEGIN CATCH PRINT 'CHYBA ' + CONVERT(varchar(10), ERROR_NUMBER()); END CATCH
+REVERT;
+"@
+        if (-not ($r -join ' ').Contains('OK')) { $nedostupne += $db }
+    }
+    if ($nedostupne.Count -gt 0) { Warn ("konzole NEDOSAHNE na: " + ($nedostupne -join ', ') + " - dashboard bude hlasit chybu") }
+    else { Ok ("konzole dosahne na vsechny databaze (" + ((@($AdminDb, $ArchiveDb) + $vsechnyZdroje) -join ', ') + ")") }
+}
 # --------------------------------------------------------------- hotovo
 Write-Host "`n=== Hotovo ===" -ForegroundColor Green
 Write-Host "`nHESLA - vypisuji se jedinkrat, nikam se neukladaji:" -ForegroundColor Yellow
