@@ -352,6 +352,16 @@ $t = Test-NetConnection -ComputerName $SqlServer -Port 1433 -WarningAction Silen
 if (-not $t.TcpTestSucceeded) { throw "Na $SqlServer`:1433 se nelze pripojit - firewall, nebo SQL nenaslouch? na TCP." }
 Ok 'TCP 1433 odpovida'
 
+# Stara instance konzole se do SQL hlasi kazdych ~30 s. Po prenasazeni databaze
+# ma v promenne aplikacniho fondu stare heslo, takze kazdy pokus selze - a pri
+# bezne zasade "limit zamknuti 10" se ucet zamkne driv, nez stihne nekdo nasadit
+# novou verzi. Zamceny ucet odmita i SPRAVNE heslo, takze se nasazeni uz nikdy
+# nechytne: zamek po deseti minutach vyprsi a stara konzole ho hned zamkne znovu.
+# Proto se stara instance zastavuje TED, pred testem prihlaseni - ne az u
+# kopirovani souboru, kam to puvodne patrilo.
+Stop-SiteAndPoolX -Site $SiteName -Pool $AppPoolName
+Ok 'pripadna predchozi instance konzole zastavena (aby nezamkla ucet)'
+
 $csBase = "Server=$SqlServer;Database=$AdminDb;TrustServerCertificate=True;Encrypt=True;"
 $cs = if ($AuthMode -eq 'Windows') { $csBase + 'Trusted_Connection=True;' }
       else { $csBase + "User ID=$SqlLogin;Password=$SqlPassword;" }
@@ -365,7 +375,24 @@ if ($AuthMode -eq 'SqlLogin') {
         Ok ('prihlaseni proslo: ' + $c.ExecuteScalar())
         $cn.Close()
     }
-    catch { throw "SQL login selhal: $($_.Exception.Message)" }
+    catch {
+        # 18486 = ucet je zamceny. Rozlisit to je zasadni: zamceny ucet odmita
+        # i spravne heslo, takze bez teto hlasky clovek marne overuje heslo,
+        # ktere je cele tu dobu v poradku.
+        $ex = $_.Exception
+        while ($ex -and -not ($ex -is [System.Data.SqlClient.SqlException])) { $ex = $ex.InnerException }
+        if ($ex -and $ex.Number -eq 18486) {
+            Write-Host ''
+            Warn "Ucet $SqlLogin je na SQL Serveru ZAMCENY - proto neprojde ani spravne heslo."
+            Warn 'Zamkla ho predchozi instance konzole: hlasi se starym heslem kazdych ~30 s'
+            Warn 'a prekroci limit neuspesnych pokusu. Jeji fond uz tento skript zastavil,'
+            Warn 'takze zamek po dobe zamceni (zpravidla 10 minut) sam vyprsi - pak spustte'
+            Warn 'skript znovu. Okamzite odemknuti na SQL Serveru:'
+            Warn "   ALTER LOGIN [$SqlLogin] WITH PASSWORD = N'<heslo>' UNLOCK;"
+            throw "Ucet $SqlLogin je zamceny."
+        }
+        throw ('SQL login selhal: ' + $(if ($ex) { $ex.Message } else { $_.Exception.Message }))
+    }
 }
 
 # ----------------------------------------------------------- 4) soubory

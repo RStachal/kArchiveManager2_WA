@@ -312,6 +312,9 @@ else {
     $null = SqlFile -Path $c -Db 'master'
     Remove-Item $c -Force
     Ok "${ConsoleLogin}: pet roli karch_*, cteni v archivu a ve vsech zdrojich ($($vsechnyZdroje -join ', ')), cteni msdb"
+    Warn 'Bezi-li jeste stara konzole, zastavte jeji aplikacni fond. Ma v promenne fondu'
+    Warn 'predchozi heslo, hlasi se s nim kazdych ~30 s a po par minutach ucet ZAMKNE -'
+    Warn 'a zamceny ucet pak odmitne i nove heslo, takze konzoli uz nenasadite.'
 }
 
 # ------------------------------------------- 9) operatorske API a operator
