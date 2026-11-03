@@ -64,6 +64,7 @@ $db = Join-Path $stage 'database'
 New-Item -ItemType Directory -Path $db -Force | Out-Null
 Pridej 'Deploy-Database.ps1'  $db
 Pridej 'Uninstall-kAM2.ps1'   $db
+Pridej 'Rollback-Sources.ps1' $db
 Pridej 'Run-Deploy.ps1'       $db
 Pridej 'sql'                  $db
 foreach ($p in @('kAM2\01-database\deploy_clean_v2_full.sql',
@@ -247,7 +248,7 @@ function Test-Zip {
 }
 
 Test-Zip -Zip $dbZip -Musi @(
-    'Deploy-Database.ps1', 'Uninstall-kAM2.ps1', 'Run-Deploy.ps1', 'SPUSTENI.txt',
+    'Deploy-Database.ps1', 'Uninstall-kAM2.ps1', 'Run-Deploy.ps1', 'Rollback-Sources.ps1', 'SPUSTENI.txt',
     'sql/01_precheck.sql', 'sql/02_databases.sql', 'sql/56_agent_jobs.sql',
     'sql/60_configure_kmwe_edge.sql', 'sql/61_console_principal_sql_login.sql',
     'sql/62_add_source_database.sql',

@@ -58,6 +58,7 @@ New-Item -ItemType Directory -Path $db -Force | Out-Null
 
 Add-Item2 'Deploy-Database.ps1'  $db
 Add-Item2 'Uninstall-kAM2.ps1'    $db
+Add-Item2 'Rollback-Sources.ps1'  $db
 Add-Item2 'Run-Deploy.ps1'      $db
 # cely sql\ - jsou to jen textove skripty a Run-Deploy saha i na dalsi faze
 Add-Item2 'sql' $db
@@ -241,7 +242,7 @@ function Test-Zip {
 }
 
 Test-Zip -Zip $dbZip -Musi @(
-    'Deploy-Database.ps1', 'Run-Deploy.ps1', 'Uninstall-kAM2.ps1', 'SPUSTENI.txt',
+    'Deploy-Database.ps1', 'Run-Deploy.ps1', 'Uninstall-kAM2.ps1', 'Rollback-Sources.ps1', 'SPUSTENI.txt',
     'sql/01_precheck.sql', 'sql/02_databases.sql', 'sql/56_agent_jobs.sql',
     'sql/60_configure_kmwe_edge.sql', 'sql/61_console_principal_sql_login.sql',
     'kAM2/01-database/deploy_clean_v2_full.sql',
